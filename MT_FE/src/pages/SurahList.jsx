@@ -213,9 +213,11 @@ function SurahList() {
                 }}
               >
                 <div style={{ flex: 1 }}>
-                  <strong>{surah.chapter_name}</strong> (ID: {surah.id}, Total
-                  Verses: {surah.total_verse}, Verses Memorized:{' '}
-                  {surah.verse_memorized})
+                  <strong>
+                    {surah.id}. {surah.chapter_name}
+                  </strong>{' '}
+                  ( Verses Memorized: {surah.verse_memorized}/
+                  {surah.total_verse})
                 </div>
                 <button
                   onClick={(event) =>
