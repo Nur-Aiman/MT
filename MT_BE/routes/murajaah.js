@@ -70,33 +70,45 @@ router.post('/addmurajaah', (req, res) => {
 
         // Get current date and time
         const date_time = moment.tz('Asia/Kuala_Lumpur').format()
-        console.log(date_time)
+        const currentDate = moment.tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD')
 
         let updatedSurahIds, completion_rate
 
-        const currentDate = moment.tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD')
-        const logDate = moment
-          .tz(logResult.rows[0].date_time, 'Asia/Kuala_Lumpur')
-          .format('YYYY-MM-DD')
-
         // If there is an existing log for today
-        if (logResult.rows.length > 0 && logDate === currentDate) {
-          updatedSurahIds = [...logResult.rows[0].surah_id, surah_id]
-          completion_rate = (updatedSurahIds.length / total_memorized) * 100
+        if (logResult.rows.length > 0) {
+          const logDate = moment
+            .tz(logResult.rows[0].date_time, 'Asia/Kuala_Lumpur')
+            .format('YYYY-MM-DD')
 
-          // Update the existing log
-          pool.query(
-            'UPDATE murajaah_log SET surah_id = $1, date_time = $2, completion_rate = $3 WHERE id = $4',
-            [updatedSurahIds, date_time, completion_rate, logResult.rows[0].id],
-            (err) => {
-              if (err) {
-                console.error(err)
-                return res.status(500).send('Server Error')
+          if (logDate === currentDate) {
+            updatedSurahIds = [...logResult.rows[0].surah_id, surah_id]
+            completion_rate = (updatedSurahIds.length / total_memorized) * 100
+
+            // Update the existing log
+            pool.query(
+              'UPDATE murajaah_log SET surah_id = $1, date_time = $2, completion_rate = $3 WHERE id = $4',
+              [
+                updatedSurahIds,
+                date_time,
+                completion_rate,
+                logResult.rows[0].id,
+              ],
+              (err) => {
+                if (err) {
+                  console.error(err)
+                  return res.status(500).send('Server Error')
+                }
+                res.status(200).send('Updated Successfully')
               }
-              res.status(200).send('Updated Successfully')
-            }
-          )
+            )
+          } else {
+            insertNewLog()
+          }
         } else {
+          insertNewLog()
+        }
+
+        function insertNewLog() {
           updatedSurahIds = [surah_id]
           completion_rate = (updatedSurahIds.length / total_memorized) * 100
 
