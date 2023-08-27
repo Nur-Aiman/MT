@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { HOST } from '../api'
 
 function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData }) {
   const [formData, setFormData] = useState({
@@ -32,8 +33,8 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData }) {
     e.preventDefault()
 
     const endpoint = isEditMode
-      ? `http://localhost:3000/murajaah/updatesurah/${formData.id}`
-      : 'http://localhost:3000/murajaah/addsurah'
+      ? `${HOST}/murajaah/updatesurah/${formData.id}`
+      : `${HOST}/murajaah/addsurah`
     const method = isEditMode ? 'PUT' : 'POST'
 
     fetch(endpoint, {
@@ -57,7 +58,7 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData }) {
         `Are you sure you want to delete surah ${formData.chapter_name}?`
       )
     ) {
-      fetch(`http://localhost:3000/murajaah/deletesurah/${formData.id}`, {
+      fetch(`${HOST}/murajaah/deletesurah/${formData.id}`, {
         method: 'DELETE',
       })
         .then((res) => res.json())

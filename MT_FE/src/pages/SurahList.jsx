@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import AddSurahModal from '../components/AddSurahModal'
+import { HOST } from '../api'
 
 function SurahList() {
   const [surahs, setSurahs] = useState([])
@@ -20,7 +21,7 @@ function SurahList() {
   }
 
   const fetchSurahs = () => {
-    fetch('http://localhost:3000/murajaah/getmemorizedsurah')
+    fetch(`${HOST}/murajaah/getmemorizedsurah`)
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
@@ -35,7 +36,7 @@ function SurahList() {
   }
 
   const fetchCompletionRate = (surahList = surahs) => {
-    fetch(`http://localhost:3000/murajaah/getmurajaahprogress?date=${date}`)
+    fetch(`${HOST}/murajaah/getmurajaahprogress?date=${date}`)
       .then((res) => res.json())
       .then((data) => {
         const newCheckedSurahs = surahList.reduce((obj, surah) => {
@@ -91,7 +92,7 @@ function SurahList() {
     }
     setCheckedSurahs(updatedCheckedSurahs)
 
-    fetch('http://localhost:3000/murajaah/addmurajaah', {
+    fetch(`${HOST}/murajaah/addmurajaah`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
