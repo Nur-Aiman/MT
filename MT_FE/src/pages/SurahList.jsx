@@ -123,7 +123,7 @@ function SurahList() {
       }}
     >
       <h1 style={{ borderBottom: '2px solid #84a59d', paddingBottom: '10px' }}>
-        Memorized Surahs
+        Murajaah Tracker
       </h1>
 
       <div style={{ marginBottom: '20px' }}>
