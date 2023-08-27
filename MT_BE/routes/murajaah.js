@@ -1,5 +1,6 @@
 var express = require('express')
 var router = express.Router()
+const moment = require('moment-timezone')
 const { query, pool } = require('../config/database')
 
 router.get('/', function (req, res, next) {
@@ -68,7 +69,8 @@ router.post('/addmurajaah', (req, res) => {
         }
 
         // Get current date and time
-        const date_time = new Date().toISOString()
+        const date_time = moment.tz('Asia/Kuala_Lumpur').format()
+        console.log(date_time)
 
         let updatedSurahIds, completion_rate
 
