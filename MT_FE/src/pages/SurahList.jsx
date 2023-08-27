@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react'
 import AddSurahModal from '../components/AddSurahModal'
 import { HOST } from '../api'
+import moment from 'moment-timezone'
 
 function SurahList() {
   const [surahs, setSurahs] = useState([])
   const [checkedSurahs, setCheckedSurahs] = useState({})
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [completionRate, setCompletionRate] = useState(null)
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(
+    moment.tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD')
+  )
   const [selectedSurah, setSelectedSurah] = useState(null)
 
   useEffect(() => {
@@ -15,9 +18,11 @@ function SurahList() {
   }, [date])
 
   const changeDate = (days) => {
-    const newDate = new Date(date)
-    newDate.setDate(newDate.getDate() + days)
-    setDate(newDate.toISOString().split('T')[0])
+    const newDate = moment
+      .tz(date, 'Asia/Kuala_Lumpur')
+      .add(days, 'days')
+      .format('YYYY-MM-DD')
+    setDate(newDate)
   }
 
   const fetchSurahs = () => {
