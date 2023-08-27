@@ -16,7 +16,7 @@ app.set('views', path.join(__dirname, 'views'))
 app.set('view engine', 'jade')
 
 const corsOptions = {
-  origin: 'http://localhost:3001', // Replace with the origin of your React app
+  origin: 'https://murajaah-tracker.onrender.com', // Replace with the origin of your React app
 }
 
 app.use(cors(corsOptions))
