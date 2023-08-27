@@ -216,8 +216,8 @@ function SurahList() {
                   <strong>
                     {surah.id}. {surah.chapter_name}
                   </strong>{' '}
-                  ( Verses Memorized: {surah.verse_memorized}/
-                  {surah.total_verse})
+                  (Verses Memorized: {surah.verse_memorized}/{surah.total_verse}
+                  )
                 </div>
                 <button
                   onClick={(event) =>
