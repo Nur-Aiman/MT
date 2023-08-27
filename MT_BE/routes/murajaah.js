@@ -74,12 +74,13 @@ router.post('/addmurajaah', (req, res) => {
 
         let updatedSurahIds, completion_rate
 
+        const currentDate = moment.tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD')
+        const logDate = moment
+          .tz(logResult.rows[0].date_time, 'Asia/Kuala_Lumpur')
+          .format('YYYY-MM-DD')
+
         // If there is an existing log for today
-        if (
-          logResult.rows.length > 0 &&
-          new Date(logResult.rows[0].date_time).toDateString() ===
-            new Date(date_time).toDateString()
-        ) {
+        if (logResult.rows.length > 0 && logDate === currentDate) {
           updatedSurahIds = [...logResult.rows[0].surah_id, surah_id]
           completion_rate = (updatedSurahIds.length / total_memorized) * 100
 
