@@ -234,6 +234,7 @@ const SabaqModal = ({ isOpen, onClose }) => {
     </div>
   )
 }
+const mediaQuery = '@media (max-width: 500px)'
 
 const incrementButtonStyles = {
   padding: '10px 20px',
@@ -248,12 +249,19 @@ const incrementButtonStyles = {
   '&:hover': {
     backgroundColor: '#6b8d85',
   },
+  [mediaQuery]: {
+    fontSize: '18px',
+    padding: '8px 16px',
+  },
 }
 
 const labelStyles = {
   fontWeight: 'bold',
   marginBottom: '5px',
   display: 'block',
+  [mediaQuery]: {
+    fontSize: '14px',
+  },
 }
 
 const modalStyles = {
@@ -276,6 +284,9 @@ const modalContentStyles = {
   padding: '20px',
   borderRadius: '8px',
   boxSizing: 'border-box',
+  [mediaQuery]: {
+    width: '90%',
+  },
 }
 
 const formStyles = {
@@ -289,6 +300,11 @@ const inputStyles = {
   borderRadius: '4px',
   width: '80%',
   margin: '10px',
+  [mediaQuery]: {
+    fontSize: '14px',
+    padding: '8px',
+    width: '100%',
+  },
 }
 
 const checkboxLabelStyles = {
@@ -304,6 +320,10 @@ const closeButtonStyles = {
   color: 'white',
   borderRadius: '5px',
   cursor: 'pointer',
+  [mediaQuery]: {
+    fontSize: '14px',
+    padding: '8px',
+  },
 }
 
 const submitButtonStyles = {
@@ -314,6 +334,10 @@ const submitButtonStyles = {
   color: 'white',
   borderRadius: '5px',
   cursor: 'pointer',
+  [mediaQuery]: {
+    fontSize: '14px',
+    padding: '8px',
+  },
 }
 
 export default SabaqModal
