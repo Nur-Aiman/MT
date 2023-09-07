@@ -200,4 +200,76 @@ router.get('/getmurajaahprogress', (req, res) => {
   )
 })
 
+// @desc Get Weekly Murajaah Progress
+// @route GET /murajaah/getweeklymurajaahprogress
+// @access public
+router.get('/getweeklymurajaahprogress', (req, res) => {
+  const { date } = req.query
+
+  if (!date) {
+    return res.status(400).send('Please provide a date to determine the week.')
+  }
+
+  const startOfGivenWeek = moment(date).startOf('week').tz('Asia/Kuala_Lumpur')
+  const endOfGivenWeek = moment(date).endOf('week').tz('Asia/Kuala_Lumpur')
+
+  const weekData = {
+    Sunday: { day: startOfGivenWeek.clone().format(), rate: '0.00' },
+    Monday: {
+      day: startOfGivenWeek.clone().add(1, 'days').format(),
+      rate: '0.00',
+    },
+    Tuesday: {
+      day: startOfGivenWeek.clone().add(2, 'days').format(),
+      rate: '0.00',
+    },
+    Wednesday: {
+      day: startOfGivenWeek.clone().add(3, 'days').format(),
+      rate: '0.00',
+    },
+    Thursday: {
+      day: startOfGivenWeek.clone().add(4, 'days').format(),
+      rate: '0.00',
+    },
+    Friday: {
+      day: startOfGivenWeek.clone().add(5, 'days').format(),
+      rate: '0.00',
+    },
+    Saturday: { day: endOfGivenWeek.clone().format(), rate: '0.00' },
+  }
+
+  const query = `
+      SELECT 
+          DATE(date_time) AS day, 
+          AVG(completion_rate) AS average_completion_rate
+      FROM murajaah_log 
+      WHERE DATE(date_time) BETWEEN $1 AND $2
+      GROUP BY DATE(date_time)
+      ORDER BY DATE(date_time) ASC
+  `
+
+  pool.query(
+    query,
+    [
+      startOfGivenWeek.format('YYYY-MM-DD'),
+      endOfGivenWeek.format('YYYY-MM-DD'),
+    ],
+    (err, result) => {
+      if (err) {
+        console.error(err)
+        return res.status(500).send('Server Error')
+      }
+
+      result.rows.forEach((row) => {
+        const localDate = moment.utc(row.day).tz('Asia/Kuala_Lumpur')
+        const dayName = localDate.format('dddd')
+        weekData[dayName].day = localDate.format()
+        weekData[dayName].rate = row.average_completion_rate
+      })
+
+      res.status(200).json(weekData)
+    }
+  )
+})
+
 module.exports = router

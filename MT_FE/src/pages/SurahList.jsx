@@ -12,9 +12,11 @@ function SurahList() {
     moment.tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD')
   )
   const [selectedSurah, setSelectedSurah] = useState(null)
+  const [weeklyProgress, setWeeklyProgress] = useState({})
 
   useEffect(() => {
     fetchSurahs()
+    fetchWeeklyMurajaahProgress()
   }, [date])
 
   const changeDate = (days) => {
@@ -67,6 +69,20 @@ function SurahList() {
         setCheckedSurahs(newCheckedSurahs)
       })
       .catch((error) => console.error('An error occurred:', error))
+  }
+
+  const fetchWeeklyMurajaahProgress = () => {
+    fetch(`${HOST}/murajaah/getweeklymurajaahprogress?date=${date}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setWeeklyProgress(data)
+      })
+      .catch((error) =>
+        console.error(
+          'An error occurred while fetching weekly murajaah progress:',
+          error
+        )
+      )
   }
 
   const groupedSurahs = Array.isArray(surahs)
@@ -173,6 +189,43 @@ function SurahList() {
           {completionRate !== null ? completionRate : 0}%
         </p>
       )}
+
+      <table
+        style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}
+      >
+        <thead>
+          <tr>
+            {Object.entries(weeklyProgress).map(([day, progressData]) => (
+              <th
+                key={day}
+                style={{
+                  borderBottom: '2px solid #84a59d',
+                  padding: '10px',
+                  textAlign: 'center',
+                }}
+              >
+                {day} ({moment(progressData.day).format('DD-MM-YYYY')})
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            {Object.entries(weeklyProgress).map(([day, progressData]) => (
+              <td
+                key={day}
+                style={{
+                  borderBottom: '1px solid #ccc',
+                  padding: '10px',
+                  textAlign: 'center',
+                }}
+              >
+                {parseFloat(progressData.rate).toFixed(2)}%
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
 
       <button
         onClick={() => setIsModalOpen(true)}

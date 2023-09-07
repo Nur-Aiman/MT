@@ -19,6 +19,9 @@ const corsOptions = {
   origin: 'https://murajaah-tracker.onrender.com', // Replace with the origin of your React app
 }
 
+// local : http://localhost:3001
+// production : https://murajaah-tracker.onrender.com
+
 app.use(cors(corsOptions))
 
 // app.use(logger('dev'))
