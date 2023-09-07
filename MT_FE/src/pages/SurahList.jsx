@@ -190,42 +190,57 @@ function SurahList() {
         </p>
       )}
 
-      <table
-        style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}
-      >
-        <thead>
-          <tr>
-            {Object.entries(weeklyProgress).map(([day, progressData]) => (
-              <th
-                key={day}
-                style={{
-                  borderBottom: '2px solid #84a59d',
-                  padding: '10px',
-                  textAlign: 'center',
-                }}
-              >
-                {day} ({moment(progressData.day).format('DD-MM-YYYY')})
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            {Object.entries(weeklyProgress).map(([day, progressData]) => (
-              <td
-                key={day}
-                style={{
-                  borderBottom: '1px solid #ccc',
-                  padding: '10px',
-                  textAlign: 'center',
-                }}
-              >
-                {parseFloat(progressData.rate).toFixed(2)}%
-              </td>
-            ))}
-          </tr>
-        </tbody>
-      </table>
+      <div style={{ overflowX: 'auto' }}>
+        <table
+          style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            marginTop: '20px',
+            fontSize: '14px',
+          }}
+        >
+          <thead>
+            <tr>
+              {Object.entries(weeklyProgress).map(([day, progressData]) => (
+                <th
+                  key={day}
+                  style={{
+                    borderBottom: '2px solid #84a59d',
+                    padding: '10px',
+                    textAlign: 'center',
+                  }}
+                >
+                  {day} ({moment(progressData.day).format('DD-MM-YYYY')})
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              {Object.entries(weeklyProgress).map(([day, progressData]) => (
+                <td
+                  key={day}
+                  style={{
+                    borderBottom: '1px solid #ccc',
+                    padding: '10px',
+                    textAlign: 'center',
+                  }}
+                >
+                  {parseFloat(progressData.rate).toFixed(2)}%
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <style jsx>{`
+  @media (max-width: 480px) {
+    table {
+      fontSize: 12px;
+    }
+  }
+`}</style>
 
       <button
         onClick={() => setIsModalOpen(true)}
