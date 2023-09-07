@@ -288,6 +288,8 @@ const modalStyles = {
 const modalContentStyles = {
   width: '70%',
   maxWidth: '500px',
+  maxHeight: '80vh',
+  overflowY: 'auto',
   backgroundColor: '#fff',
   padding: '20px',
   borderRadius: '8px',
