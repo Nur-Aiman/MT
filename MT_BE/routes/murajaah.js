@@ -272,4 +272,93 @@ router.get('/getweeklymurajaahprogress', (req, res) => {
   )
 })
 
+// @desc Add New Sabaq Record
+// @route POST /sabaqtracker/add
+// @access public
+router.post('/sabaqtracker/add', (req, res) => {
+  const {
+    chapter_number,
+    chapter_name,
+    page,
+    section,
+    verse,
+    number_of_readings,
+    complete_memorization,
+    murajaah_20_times,
+  } = req.body
+
+  const currentDate = moment.tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD')
+
+  // Check if an entry with the same values exists for the current day
+  pool.query(
+    'SELECT * FROM sabaq_tracker WHERE date = $1 AND chapter_number = $2 AND chapter_name = $3 AND page = $4 AND section = $5 AND verse = $6',
+    [currentDate, chapter_number, chapter_name, page, section, verse],
+    (err, result) => {
+      if (err) {
+        console.error(err)
+        return res.status(500).json({ message: 'Server Error' })
+      }
+
+      if (result.rows.length > 0) {
+        // Update the existing row
+        pool.query(
+          'UPDATE sabaq_tracker SET number_of_readings = $1, complete_memorization = $2, murajaah_20_times = $3 WHERE id = $4',
+          [
+            number_of_readings,
+            complete_memorization,
+            murajaah_20_times,
+            result.rows[0].id,
+          ],
+          (err) => {
+            if (err) {
+              console.error(err)
+              return res.status(500).json({ message: 'Server Error' })
+            }
+            res.status(200).json({ message: 'Updated Successfully' })
+          }
+        )
+      } else {
+        // Insert a new row
+        pool.query(
+          'INSERT INTO sabaq_tracker (date, chapter_number, chapter_name, page, section, verse, number_of_readings, complete_memorization, murajaah_20_times) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+          [
+            currentDate,
+            chapter_number,
+            chapter_name,
+            page,
+            section,
+            verse,
+            number_of_readings,
+            complete_memorization,
+            murajaah_20_times,
+          ],
+          (err) => {
+            if (err) {
+              console.error(err)
+              return res.status(500).json({ message: 'Server Error' })
+            }
+            res.status(201).json({ message: 'Inserted Successfully' })
+          }
+        )
+      }
+    }
+  )
+})
+
+// @desc Get Latest Sabaq Info
+// @route GET /sabaqtracker/latest
+// @access public
+router.get('/sabaqtracker/latest', (req, res) => {
+  const query = 'SELECT * FROM sabaq_tracker ORDER BY id DESC LIMIT 1'
+
+  pool.query(query, (err, result) => {
+    if (err) {
+      console.error(err)
+      res.status(500).send('Server Error')
+    } else {
+      res.status(200).json(result.rows[0])
+    }
+  })
+})
+
 module.exports = router
