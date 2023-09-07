@@ -65,13 +65,21 @@ const SabaqModal = ({ isOpen, onClose }) => {
     }
   }
 
+  const handleBackgroundClick = (e) => {
+    onClose()
+  }
+
+  const handleContentClick = (e) => {
+    e.stopPropagation()
+  }
+
   if (!isOpen) {
     return null
   }
 
   return (
-    <div style={modalStyles}>
-      <div style={modalContentStyles}>
+    <div style={modalStyles} onClick={handleBackgroundClick}>
+      <div style={modalContentStyles} onClick={handleContentClick}>
         <h2
           style={{ borderBottom: '2px solid #84a59d', paddingBottom: '10px' }}
         >
