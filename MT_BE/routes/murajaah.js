@@ -48,87 +48,97 @@ router.get('/getmemorizedsurah', (req, res) => {
 // @route POST /murajaah/addmurajaah
 // @access public
 router.post('/addmurajaah', (req, res) => {
-  const { surah_id } = req.body
+  const { surah_id } = req.body;
 
   // Get the total number of memorized Surahs
   pool.query('SELECT COUNT(*) FROM memorized_surah', (err, countResult) => {
     if (err) {
-      console.error(err)
-      return res.status(500).send('Server Error')
+      console.error(err);
+      return res.status(500).send('Server Error');
     }
 
-    const total_memorized = parseInt(countResult.rows[0].count)
+    const total_memorized = parseInt(countResult.rows[0].count);
+    const date_time = moment.tz('Asia/Kuala_Lumpur').format();
+    const currentDate = moment.tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD');
 
-    // Get the latest murajaah log
+    // Update murajaah_counter
     pool.query(
-      'SELECT * FROM murajaah_log ORDER BY date_time DESC LIMIT 1',
-      (err, logResult) => {
+      'UPDATE memorized_surah SET murajaah_counter = murajaah_counter + 1 WHERE id = $1',
+      [surah_id],
+      (err) => {
         if (err) {
-          console.error(err)
-          return res.status(500).send('Server Error')
+          console.error(err);
+          return res.status(500).send('Error updating murajaah counter');
         }
 
-        // Get current date and time
-        const date_time = moment.tz('Asia/Kuala_Lumpur').format()
-        const currentDate = moment.tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD')
-
-        let updatedSurahIds, completion_rate
-
-        // If there is an existing log for today
-        if (logResult.rows.length > 0) {
-          const logDate = moment
-            .tz(logResult.rows[0].date_time, 'Asia/Kuala_Lumpur')
-            .format('YYYY-MM-DD')
-
-          if (logDate === currentDate) {
-            updatedSurahIds = [...logResult.rows[0].surah_id, surah_id]
-            completion_rate = (updatedSurahIds.length / total_memorized) * 100
-
-            // Update the existing log
-            pool.query(
-              'UPDATE murajaah_log SET surah_id = $1, date_time = $2, completion_rate = $3 WHERE id = $4',
-              [
-                updatedSurahIds,
-                date_time,
-                completion_rate,
-                logResult.rows[0].id,
-              ],
-              (err) => {
-                if (err) {
-                  console.error(err)
-                  return res.status(500).send('Server Error')
-                }
-                res.status(200).send('Updated Successfully')
-              }
-            )
-          } else {
-            insertNewLog()
-          }
-        } else {
-          insertNewLog()
-        }
-
-        function insertNewLog() {
-          updatedSurahIds = [surah_id]
-          completion_rate = (updatedSurahIds.length / total_memorized) * 100
-
-          // Insert a new log
-          pool.query(
-            'INSERT INTO murajaah_log (surah_id, date_time, completion_rate) VALUES ($1, $2, $3)',
-            [updatedSurahIds, date_time, completion_rate],
-            (err) => {
-              if (err) {
-                console.error(err)
-                return res.status(500).send('Server Error')
-              }
-              res.status(201).send('Inserted Successfully')
+        // Get the latest murajaah log
+        pool.query(
+          'SELECT * FROM murajaah_log ORDER BY date_time DESC LIMIT 1',
+          (err, logResult) => {
+            if (err) {
+              console.error(err);
+              return res.status(500).send('Server Error');
             }
-          )
-        }
+
+            let updatedSurahIds, completion_rate;
+
+            // If there is an existing log for today
+            if (logResult.rows.length > 0) {
+              const logDate = moment
+                .tz(logResult.rows[0].date_time, 'Asia/Kuala_Lumpur')
+                .format('YYYY-MM-DD');
+
+              if (logDate === currentDate) {
+                updatedSurahIds = [...logResult.rows[0].surah_id, surah_id];
+                completion_rate = (updatedSurahIds.length / total_memorized) * 100;
+
+                // Update the existing log
+                pool.query(
+                  'UPDATE murajaah_log SET surah_id = $1, date_time = $2, completion_rate = $3 WHERE id = $4',
+                  [
+                    updatedSurahIds,
+                    date_time,
+                    completion_rate,
+                    logResult.rows[0].id,
+                  ],
+                  (err) => {
+                    if (err) {
+                      console.error(err);
+                      return res.status(500).send('Server Error');
+                    }
+                    res.status(200).send('Updated Successfully');
+                  }
+                );
+              } else {
+                insertNewLog();
+              }
+            } else {
+              insertNewLog();
+            }
+
+            function insertNewLog() {
+              updatedSurahIds = [surah_id];
+              completion_rate = (updatedSurahIds.length / total_memorized) * 100;
+
+              // Insert a new log
+              pool.query(
+                'INSERT INTO murajaah_log (surah_id, date_time, completion_rate) VALUES ($1, $2, $3)',
+                [updatedSurahIds, date_time, completion_rate],
+                (err) => {
+                  if (err) {
+                    console.error(err);
+                    return res.status(500).send('Server Error');
+                  }
+                  res.status(201).send('Inserted Successfully');
+                }
+              );
+            }
+          }
+        );
       }
-    )
-  })
-})
+    );
+  });
+});
 
 // @desc Update Surah Details
 // @route PUT /murajaah/updatesurah/:id
