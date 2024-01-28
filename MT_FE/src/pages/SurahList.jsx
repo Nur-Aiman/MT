@@ -308,10 +308,12 @@ function SurahList() {
                 }}
               >
                 <div style={{ flex: 1 }}>
-                  <strong>
-                    {surah.id}. {surah.chapter_name}
-                  </strong>{' '}
+                  <strong style={{ fontSize: 'larger' }}> 
+        {surah.id}. {surah.chapter_name}
+      </strong>
+                  <br />
                   (Verses Memorized: {surah.verse_memorized}/{surah.total_verse})
+                  <br />
                   (Murajaah Count: {surah.murajaah_counter})
                 </div>
                 <button
