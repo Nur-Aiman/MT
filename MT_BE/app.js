@@ -16,10 +16,18 @@ app.set('views', path.join(__dirname, 'views'))
 app.set('view engine', 'jade')
 
 const corsOptions = {
-  origin: 'https://murajaah-tracker.onrender.com', // Replace with the origin of your React app
-}
+  origin: function (origin, callback) {
+    const allowedOrigins = ['http://localhost:3000', 'https://murajaah-tracker.onrender.com'];
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS policy violation'));
+    }
+  },
+  credentials: true, // if your app uses credentials
+};
 
-// local : http://localhost:3001
+// local : http://localhost:3000
 // production : https://murajaah-tracker.onrender.com
 
 app.use(cors(corsOptions))
