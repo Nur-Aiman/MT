@@ -15,6 +15,7 @@ function SurahList() {
   )
   const [selectedSurah, setSelectedSurah] = useState(null)
   const [weeklyProgress, setWeeklyProgress] = useState({})
+  const [maxMurajaahCount, setMaxMurajaahCount] = useState(0);
 
   useEffect(() => {
     fetchSurahs()
@@ -34,15 +35,16 @@ function SurahList() {
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
-          setSurahs(data)
-
-          fetchCompletionRate(data)
+          setSurahs(data);
+          const maxCount = Math.max(...data.map(surah => surah.murajaah_counter)); // Calculate the maximum murajaah count
+          setMaxMurajaahCount(maxCount); 
+          fetchCompletionRate(data);
         } else {
-          console.error('Expected an array but received:', data)
+          console.error('Expected an array but received:', data);
         }
       })
-      .catch((error) => console.error('An error occurred:', error))
-  }
+      .catch((error) => console.error('An error occurred:', error));
+  };
 
   const fetchCompletionRate = (surahList = surahs) => {
     fetch(`${HOST}/murajaah/getmurajaahprogress?date=${date}`)
@@ -314,7 +316,13 @@ function SurahList() {
                   <br />
                   (Verses Memorized: {surah.verse_memorized}/{surah.total_verse})
                   <br />
-                  (Murajaah Count: {surah.murajaah_counter})
+                  
+                    (Murajaah Count: <span
+                    style={{
+                      backgroundColor: surah.murajaah_counter !== maxMurajaahCount ? 'yellow' : 'inherit', 
+                    }}
+                  > {surah.murajaah_counter}
+                  </span>)
                 </div>
                 <button
                   onClick={(event) =>
