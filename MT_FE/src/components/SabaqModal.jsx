@@ -84,7 +84,7 @@ const SabaqModal = ({ isOpen, onClose }) => {
       const beginning = verseRange[0];
       const ending = verseRange[1];
       const surah = formData.chapter_number;
-      const apiUrl = `http://localhost:8080/murajaah/surah/${surah}?beginning=${beginning}&ending=${ending}`;
+      const apiUrl = `${HOST}/murajaah/surah/${surah}?beginning=${beginning}&ending=${ending}`;
 
       try {
         const response = await fetch(apiUrl);
@@ -102,7 +102,7 @@ const SabaqModal = ({ isOpen, onClose }) => {
       }
     } else {
       setShowVerses(false);
-      setVerses([]); // Clear verses if hiding them
+      setVerses([]); 
     }
   };
 
