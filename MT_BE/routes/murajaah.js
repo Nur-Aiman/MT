@@ -1,7 +1,10 @@
 var express = require('express')
 var router = express.Router()
+const axios = require('axios');
 const moment = require('moment-timezone')
 const { query, pool } = require('../config/database')
+
+
 
 router.get('/', function (req, res, next) {
   res.render('index', { title: 'Express' })
@@ -370,5 +373,55 @@ router.get('/sabaqtracker/latest', (req, res) => {
     }
   })
 })
+
+// @desc Get verses by page from the Quran API
+// @route GET /quran/versesbypage/:page
+// @access public
+// router.get('/quran/versesbypage/:page', async (req, res) => {
+//   const page = req.params.page;
+//   const apiUrl = `https://api.quran.com/api/v4/verses/by_page/${page}?language=en&words=true`;
+
+//   try {
+//     const response = await axios.get(apiUrl);
+//     res.status(200).json(response.data);
+//   } catch (error) {
+//     console.error('Error calling Quran API', error);
+//     res.status(500).send('Server Error');
+//   }
+// });
+
+
+router.get('/surah/:surah', async (req, res) => {
+  const { surah } = req.params; // Surah number from URL parameters
+  const { edition = 'quran-uthmani', beginning, ending } = req.query; // Default edition set to 'quran-uthmani'
+
+  // Calculate offset and limit based on beginning and ending ayahs
+  let offset, limit;
+  if (beginning && ending) {
+    offset = parseInt(beginning) - 1; // Assuming ayah numbering starts at 1, offset needs to start at 0
+    limit = parseInt(ending) - parseInt(beginning) + 1;
+  }
+
+  // Construct the API URL with calculated offset and limit
+  let apiUrl = `http://api.alquran.cloud/v1/surah/${surah}/${edition}`;
+  if (offset !== undefined && limit !== undefined) {
+    apiUrl += `?offset=${offset}&limit=${limit}`;
+  }
+
+  try {
+    const response = await axios.get(apiUrl);
+    if (response.data.code === 200) {
+      res.json(response.data);
+    } else {
+      // Forward the API's response code and message if not successful
+      res.status(response.data.code).json(response.data);
+    }
+  } catch (error) {
+    console.error('Error calling Al Quran Cloud API:', error);
+    res.status(500).send('Server Error');
+  }
+});
+
+
 
 module.exports = router

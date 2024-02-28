@@ -13,6 +13,10 @@ const SabaqModal = ({ isOpen, onClose }) => {
     murajaah_20_times: 0,
   })
 
+  const [showVerses, setShowVerses] = useState(false);
+  const [verses, setVerses] = useState([]);
+
+
   const handleChange = (e) => {
     const { name, value } = e.target
     setFormData((prevState) => ({ ...prevState, [name]: value }))
@@ -73,6 +77,35 @@ const SabaqModal = ({ isOpen, onClose }) => {
     e.stopPropagation()
   }
 
+  const handleViewVerseClick = async () => {
+    
+    if (!showVerses) { // Only fetch verses if they are about to be shown
+      const verseRange = formData.verse.split('-').map(num => num.trim());
+      const beginning = verseRange[0];
+      const ending = verseRange[1];
+      const surah = formData.chapter_number;
+      const apiUrl = `http://localhost:8080/murajaah/surah/${surah}?beginning=${beginning}&ending=${ending}`;
+
+      try {
+        const response = await fetch(apiUrl);
+        const data = await response.json();
+        if (response.ok) {
+          setVerses(data.data.ayahs.map(ayah => `${ayah.text} - ${ayah.numberInSurah}`));
+          setShowVerses(true);
+        } else {
+          console.error('Error fetching verses', data.message);
+          alert(data.message || 'Error fetching verses');
+        }
+      } catch (error) {
+        console.error('Error fetching verses', error);
+        alert('An error occurred while fetching verses. Please fill in chapter number (eg : 73) and verse range (eg : 1 - 3)');
+      }
+    } else {
+      setShowVerses(false);
+      setVerses([]); // Clear verses if hiding them
+    }
+  };
+
   if (!isOpen) {
     return null
   }
@@ -85,6 +118,15 @@ const SabaqModal = ({ isOpen, onClose }) => {
         >
           Add Sabaq Record
         </h2>
+
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <button onClick={handleViewVerseClick} style={viewVerseButtonStyles}>
+            {showVerses ? 'Hide Verse' : 'View Verse'}
+          </button>
+        </div>
+        {showVerses && verses.map((verse, index) => (
+          <div key={index} style={{ textAlign: 'center', marginBottom: '20px', fontSize: '25px' }}>{verse}</div>
+        ))}
         <form onSubmit={handleSubmit} style={formStyles}>
           <div className='inputGroup'>
             <label style={labelStyles}>Chapter Number</label>
@@ -269,6 +311,22 @@ const labelStyles = {
   display: 'block',
   [mediaQuery]: {
     fontSize: '14px',
+  },
+}
+
+const viewVerseButtonStyles = {
+  marginTop: '10px',
+  marginBottom: '20px', 
+  padding: '10px 15px',
+  backgroundColor: '#84a59d', 
+  color: 'white',
+  border: 'none',
+  borderRadius: '5px',
+  cursor: 'pointer',
+  fontWeight: 'bold',
+  [mediaQuery]: {
+    fontSize: '14px',
+    padding: '8px 12px',
   },
 }
 

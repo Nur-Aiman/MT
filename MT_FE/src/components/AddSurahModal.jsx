@@ -171,7 +171,7 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData }) {
                   onChange={handleInputChange}
                   required
                   style={{
-                    width: '100%',
+                    width: '95%',
                     padding: '10px',
                     borderRadius: '4px',
                     border: '1px solid #e1e4e8',

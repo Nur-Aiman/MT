@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import AddSurahModal from '../components/AddSurahModal'
 import SabaqModal from '../components/SabaqModal'
+import LoginModal from '../components/LoginModal';
 import { HOST } from '../api'
 import moment from 'moment-timezone'
 
@@ -16,6 +17,7 @@ function SurahList() {
   const [selectedSurah, setSelectedSurah] = useState(null)
   const [weeklyProgress, setWeeklyProgress] = useState({})
   const [maxMurajaahCount, setMaxMurajaahCount] = useState(0);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
   useEffect(() => {
     fetchSurahs()
@@ -150,6 +152,23 @@ function SurahList() {
       <h1 style={{ borderBottom: '2px solid #84a59d', paddingBottom: '10px' }}>
         Murajaah Tracker
       </h1>
+
+      {/* <button
+        onClick={() => setIsLoginModalOpen(true)} 
+        style={{
+          marginBottom: '20px',
+          padding: '10px',
+          backgroundColor: '#84a59d',
+          border: 'none',
+          color: 'white',
+          borderRadius: '5px',
+        }}
+      >
+        Login
+      </button> */}
+
+      
+      <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} />
 
       <div style={{ marginBottom: '20px' }}>
         <button
