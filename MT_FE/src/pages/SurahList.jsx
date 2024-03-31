@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import AddSurahModal from '../components/AddSurahModal'
 import SabaqModal from '../components/SabaqModal'
 import LoginModal from '../components/LoginModal';
+import TahajjudModal from '../components/TahajjudModal';
 import { HOST } from '../api'
 import moment from 'moment-timezone'
 
@@ -10,6 +11,7 @@ function SurahList() {
   const [checkedSurahs, setCheckedSurahs] = useState({})
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isSabaqModalOpen, setIsSabaqModalOpen] = useState(false)
+  const [isTahajjudModalOpen, setIsTahajjudModalOpen] = useState(false);
   const [completionRate, setCompletionRate] = useState(null)
   const [date, setDate] = useState(
     moment.tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD')
@@ -211,6 +213,20 @@ function SurahList() {
         >
           Sabaq
         </button>
+
+        <button
+  onClick={() => setIsTahajjudModalOpen(true)}
+  style={{
+    marginLeft: '10px',
+    padding: '10px',
+    backgroundColor: '#ffd700',
+    border: 'none',
+    color: 'black',
+    borderRadius: '5px',
+  }}
+>
+  Tahajjud
+</button>
       </div>
 
       <SabaqModal
@@ -218,6 +234,12 @@ function SurahList() {
         onClose={() => setIsSabaqModalOpen(false)}
         // Add other props if needed...
       />
+
+<TahajjudModal
+  isOpen={isTahajjudModalOpen}
+  onClose={() => setIsTahajjudModalOpen(false)}
+/>
+
 
       {completionRate !== null && (
         <p

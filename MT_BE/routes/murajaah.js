@@ -420,7 +420,183 @@ router.get('/surah/:surah', async (req, res) => {
     console.error('Error calling Al Quran Cloud API:', error);
     res.status(500).send('Server Error');
   }
+})
+
+// @desc Record Tahajjud
+// @route POST /tahajjud/record
+// @access public
+router.post('/tahajjud/record', async (req, res) => {
+  const { currentDate } = req.body;
+  
+  if (!currentDate) {
+    return res.status(400).json({ message: "No current date provided." });
+  }
+
+  try {
+    await pool.query('BEGIN');
+
+    const yesterday = moment(currentDate).subtract(1, 'days').format('YYYY-MM-DD');
+
+    const latestEntryResult = await pool.query('SELECT * FROM tahajjud_tracker ORDER BY id DESC LIMIT 1');
+
+    if (latestEntryResult.rows.length > 0) {
+      const latestEntry = latestEntryResult.rows[0];
+      const latestDate = latestEntry.dates[latestEntry.dates.length - 1];
+
+      if (moment(latestDate).isSame(yesterday, 'day')) {
+        const updatedDates = [...latestEntry.dates, currentDate];
+        const newStreakCount = latestEntry.streak_count + 1;
+        await pool.query('UPDATE tahajjud_tracker SET dates = $1, streak_count = $2 WHERE id = $3', [updatedDates, newStreakCount, latestEntry.id]);
+      } else {
+        const newIdResult = await pool.query('SELECT MAX(id) FROM tahajjud_tracker');
+        const newId = (newIdResult.rows[0].max || 0) + 1;
+        await pool.query('INSERT INTO tahajjud_tracker (id, dates, streak_count) VALUES ($1, $2, $3)', [newId, [currentDate], 1]);
+      }
+    } else {
+      await pool.query('ALTER SEQUENCE tahajjud_tracker_id_seq RESTART WITH 1');
+      await pool.query('INSERT INTO tahajjud_tracker (dates, streak_count) VALUES ($1, $2)', [[currentDate], 1]);
+    }
+
+    await pool.query('COMMIT');
+    res.status(200).json({ message: 'Tahajjud recorded successfully' });
+  } catch (err) {
+    await pool.query('ROLLBACK');
+    console.error('Error recording tahajjud:', err);
+    res.status(500).send('Server Error');
+  }
 });
+
+// @desc View Tahajjud Records
+// @route GET /view_tahajjud_records
+// @access public
+router.get('/view_tahajjud_records', async (req, res) => {
+  try {
+    const currentYear = moment().year();
+    const currentMonth = moment().month() + 1; // January is 0
+
+    // Fetch highest streak
+    const highestStreakResult = await pool.query(
+      'SELECT MAX(streak_count) FROM tahajjud_tracker'
+    );
+    const highestStreak = highestStreakResult.rows[0].max || 0;
+
+    // Fetch current streak
+    const currentStreakResult = await pool.query(
+      'SELECT streak_count FROM tahajjud_tracker ORDER BY id DESC LIMIT 1'
+    );
+    const currentStreak = currentStreakResult.rows.length > 0 ? currentStreakResult.rows[0].streak_count : 0;
+
+    // Fetch total in the current month
+    const totalMonthStreakResult = await pool.query(`
+      SELECT SUM(streak_count) as total_month_streak
+      FROM (
+        SELECT DISTINCT ON (tt.id) tt.streak_count
+        FROM tahajjud_tracker tt, UNNEST(tt.dates) as d(date)
+        WHERE EXTRACT(MONTH FROM d) = $1 AND EXTRACT(YEAR FROM d) = $2
+      ) as distinct_month
+    `, [currentMonth, currentYear]);
+    const totalMonthStreak = totalMonthStreakResult.rows[0].total_month_streak || 0;
+
+    // Fetch total in the current year
+    const totalYearStreakResult = await pool.query(`
+      SELECT SUM(streak_count) as total_year_streak
+      FROM (
+        SELECT DISTINCT ON (tt.id) tt.streak_count
+        FROM tahajjud_tracker tt, UNNEST(tt.dates) as d(date)
+        WHERE EXTRACT(YEAR FROM d) = $1
+      ) as distinct_year
+    `, [currentYear]);
+    const totalYearStreak = totalYearStreakResult.rows[0].total_year_streak || 0;
+
+    // Send the response
+    res.json({
+      highestStreak: highestStreak,
+      currentStreak: currentStreak,
+      totalInCurrentMonth: totalMonthStreak,
+      totalInCurrentYear: totalYearStreak
+    });
+  } catch (err) {
+    console.error('Error fetching Tahajjud records:', err);
+    res.status(500).send('Server Error');
+  }
+});
+
+
+const getWeekRange = (offset) => {
+  const startOfWeek = moment().startOf('isoWeek').subtract(offset, 'weeks');
+  const endOfWeek = moment(startOfWeek).endOf('isoWeek');
+  return { startOfWeek, endOfWeek };
+};
+
+// @desc Get Tahajjud history for a specific week
+// @route GET /tahajjud/history/:weekOffset
+// @access public
+router.get('/tahajjud/history/:weekOffset', async (req, res) => {
+  const weekOffset = parseInt(req.params.weekOffset, 10) || 0;
+  const { startOfWeek, endOfWeek } = getWeekRange(weekOffset);
+
+  console.log('start ',startOfWeek)
+  console.log('end', endOfWeek)
+
+  try {
+    const historyResult = await pool.query(
+      `SELECT t.id, t.dates, t.streak_count
+       FROM tahajjud_tracker t, UNNEST(t.dates) as date
+       WHERE date >= $1::date AND date <= $2::date`,
+      [startOfWeek.format('YYYY-MM-DD'), endOfWeek.format('YYYY-MM-DD')]
+    );
+
+    // Assuming you want to map over the records and pick the ones unique by id, 
+    // ensuring not to double-count any streaks if multiple dates from the same streak are in the same week
+    let uniqueHistoryRecords = {};
+    historyResult.rows.forEach(record => {
+      if (!uniqueHistoryRecords[record.id]) {
+        uniqueHistoryRecords[record.id] = record;
+      }
+    });
+
+    res.json({
+      message: 'Tahajjud history retrieved successfully',
+      historyRecords: Object.values(uniqueHistoryRecords),
+      week: {
+        start: startOfWeek.format('YYYY-MM-DD'),
+        end: endOfWeek.format('YYYY-MM-DD')
+      }
+    });
+
+  } catch (error) {
+    console.error('Error retrieving Tahajjud history:', error);
+    res.status(500).json({ message: 'Failed to retrieve Tahajjud history', error: error.message });
+  }
+});
+
+// @desc Check if Tahajjud is recorded for today
+// @route GET /tahajjud/check_today_completion
+// @access public
+router.get('/tahajjud/check_today_completion', async (req, res) => {
+  try {
+    const currentDate = moment().format('YYYY-MM-DD');
+    const result = await pool.query('SELECT * FROM tahajjud_tracker WHERE $1 = ANY(dates)', [currentDate]);
+
+    if (result.rows.length > 0) {
+      // Tahajjud record found for today
+      res.json({ isCompleted: true });
+    } else {
+      // No Tahajjud record found for today
+      res.json({ isCompleted: false });
+    }
+  } catch (err) {
+    console.error('Error checking today\'s Tahajjud completion:', err);
+    res.status(500).json({ message: 'Server error while checking today\'s Tahajjud completion' });
+  }
+});
+
+
+
+
+
+
+
 
 
 
