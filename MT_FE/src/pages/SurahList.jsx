@@ -160,7 +160,7 @@ function SurahList() {
         <h1 style={{ borderBottom: '2px solid #84a59d', paddingBottom: '10px' }}>
           Murajaah Tracker
         </h1>
-        <button
+        {/* <button
           onClick={handleLoginClick}
           style={{
             padding: '10px',
@@ -172,7 +172,7 @@ function SurahList() {
           }}
         >
           Login
-        </button>
+        </button> */}
       </div>
 
       
