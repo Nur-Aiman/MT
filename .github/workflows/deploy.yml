@@ -37,7 +37,7 @@ jobs:
         DATABASE_URL=$(heroku config:get DATABASE_URL -a aiman-db)
         echo "DATABASE_URL=${DATABASE_URL}" >> $GITHUB_ENV
 
-    - name: Run deployment script
+    - name: Run setup script
       run: |
         chmod +x ./MT_BE/bin/bash.sh
         ./MT_BE/bin/bash.sh
