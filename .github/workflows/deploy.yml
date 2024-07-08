@@ -1,0 +1,36 @@
+name: Deploy Application
+
+on:
+  push:
+    branches:
+      - main 
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '18.4.0'  # Specify your Node.js version
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Fetch DATABASE_URL from Heroku
+      env:
+        HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+      run: |
+        DATABASE_URL=$(heroku config:get DATABASE_URL -a aiman-db)
+        echo "DATABASE_URL=${DATABASE_URL}" >> $GITHUB_ENV
+
+    - name: Run deployment script
+      run: |
+        chmod +x ./MT_BE/bin/bash.sh
+        ./MT_BE/bin/bash.sh
+      env:
+        DATABASE_URL: ${{ env.DATABASE_URL }}

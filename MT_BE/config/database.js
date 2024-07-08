@@ -4,10 +4,7 @@ require('dotenv').config();
 const sslConfig = process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false;
 
 const pool = new Pool({
-  host: process.env.PG_HOST,
-  user: process.env.PG_USER,
-  password: process.env.PG_PASSWORD,
-  database: process.env.PG_DATABASE,
+  connectionString: process.env.DATABASE_URL,
   ssl: sslConfig,
   max: 20,
   idleTimeoutMillis: 30000,
