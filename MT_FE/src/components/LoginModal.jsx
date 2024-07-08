@@ -1,9 +1,11 @@
-// LoginModal.js
 import React, { useState } from 'react';
+import { HOST } from '../api'
+
 
 function LoginModal({ isOpen, onClose }) {
+  const [isLoginMode, setIsLoginMode] = useState(true);
   const [credentials, setCredentials] = useState({
-    username: '',
+    email: '',
     password: '',
   });
 
@@ -12,12 +14,32 @@ function LoginModal({ isOpen, onClose }) {
     setCredentials(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Submitting login', credentials);
-    // Here you would usually send the credentials to the server for verification
-    // For now, we'll just close the modal
-    onClose();
+
+    const url = isLoginMode ? `${HOST}/users/login` : `${HOST}/users/register`; // Adjust URLs as needed
+    const method = isLoginMode ? 'POST' : 'POST'; // POST for both login and register
+
+    try {
+      const response = await fetch(url, {
+        method: method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(credentials),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        console.log('Success:', data);
+        onClose(); 
+      } else {
+        console.error('Error:', data);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    }
   };
 
   if (!isOpen) return null;
@@ -43,18 +65,20 @@ function LoginModal({ isOpen, onClose }) {
           padding: '20px',
           borderRadius: '12px',
           width: '80%',
-          maxWidth: '400px', // Ensure the modal isn't too wide on larger screens
+          maxWidth: '400px',
           boxShadow: '0px 4px 15px rgba(0, 0, 0, 0.1)',
         }}
       >
-        <h3 style={{ borderBottom: '1px solid #e1e4e8', paddingBottom: '10px' }}>Login</h3>
+        <h3 style={{ borderBottom: '1px solid #e1e4e8', paddingBottom: '10px' }}>
+          {isLoginMode ? 'Login' : 'Register'}
+        </h3>
         <form onSubmit={handleSubmit}>
           <label style={{ display: 'block', marginBottom: '15px' }}>
-            Username/Email:
+            Email:
             <input
               type="text"
-              name="username"
-              value={credentials.username}
+              name="email"
+              value={credentials.email}
               onChange={handleInputChange}
               required
               style={{
@@ -83,37 +107,52 @@ function LoginModal({ isOpen, onClose }) {
               }}
             />
           </label>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => setIsLoginMode(!isLoginMode)}
               style={{
-                padding: '10px 15px',
-                marginRight: '10px',
-                backgroundColor: '#d73a49',
-                color: '#fff',
-                borderRadius: '4px',
+                padding: '10px',
                 border: 'none',
+                backgroundColor: 'transparent',
+                color: '#0366d6',
                 cursor: 'pointer',
-                transition: 'background-color 0.3s',
-              }}
-              >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              style={{
-                padding: '10px 15px',
-                backgroundColor: '#0366d6',
-                color: '#fff',
-                borderRadius: '4px',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'background-color 0.3s',
               }}
             >
-              Login
+              {isLoginMode ? 'New User?' : 'Existing User?'}
             </button>
+            <div>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  padding: '10px 15px',
+                  marginRight: '10px',
+                  backgroundColor: '#d73a49',
+                  color: '#fff',
+                  borderRadius: '4px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.3s',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                style={{
+                  padding: '10px 15px',
+                  backgroundColor: '#0366d6',
+                  color: '#fff',
+                  borderRadius: '4px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.3s',
+                }}
+              >
+                {isLoginMode ? 'Login' : 'Register'}
+              </button>
+            </div>
           </div>
         </form>
       </div>

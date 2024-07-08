@@ -142,6 +142,11 @@ function SurahList() {
       })
   }
 
+  const handleLoginClick = () => {
+    console.log('Login button clicked');
+    setIsLoginModalOpen(true);
+  };
+
   return (
     <div
       style={{
@@ -151,23 +156,24 @@ function SurahList() {
         color: '#30404d',
       }}
     >
-      <h1 style={{ borderBottom: '2px solid #84a59d', paddingBottom: '10px' }}>
-        Murajaah Tracker
-      </h1>
-
-      {/* <button
-        onClick={() => setIsLoginModalOpen(true)} 
-        style={{
-          marginBottom: '20px',
-          padding: '10px',
-          backgroundColor: '#84a59d',
-          border: 'none',
-          color: 'white',
-          borderRadius: '5px',
-        }}
-      >
-        Login
-      </button> */}
+     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1 style={{ borderBottom: '2px solid #84a59d', paddingBottom: '10px' }}>
+          Murajaah Tracker
+        </h1>
+        <button
+          onClick={handleLoginClick}
+          style={{
+            padding: '10px',
+            backgroundColor: '#84a59d',
+            border: 'none',
+            color: 'white',
+            borderRadius: '5px',
+            cursor: 'pointer',
+          }}
+        >
+          Login
+        </button>
+      </div>
 
       
       <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} />
