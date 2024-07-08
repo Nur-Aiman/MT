@@ -3,7 +3,7 @@ name: Deploy Application
 on:
   push:
     branches:
-      - main 
+      - main  # or the branch you want to trigger deployment
 
 jobs:
   deploy:
@@ -16,10 +16,11 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v2
       with:
-        node-version: '18.4.0'  # Specify your Node.js version
+        node-version: '18.4.0'  
 
     - name: Install dependencies
       run: npm install
+      working-directory: ./MT_BE
 
     - name: Fetch DATABASE_URL from Heroku
       env:
