@@ -395,5 +395,6 @@ function SurahList() {
     </div>
   )
 }
+//comment
 
 export default SurahList
