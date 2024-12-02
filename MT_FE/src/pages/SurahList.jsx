@@ -396,5 +396,6 @@ function SurahList() {
   )
 }
 //comment
+//comment2
 
 export default SurahList
