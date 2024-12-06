@@ -158,7 +158,7 @@ function SurahList() {
     >
      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ borderBottom: '2px solid #84a59d', paddingBottom: '10px' }}>
-          Murajaah Tracker2
+          Murajaah Tracker
         </h1>
         {/* <button
           onClick={handleLoginClick}
