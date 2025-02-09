@@ -9,6 +9,8 @@ var indexRouter = require('./routes/index')
 var usersRouter = require('./routes/users')
 var murajaahRouter = require('./routes/murajaah')
 
+require('./routes/murajaahReminder');
+
 var app = express()
 
 // view engine setup

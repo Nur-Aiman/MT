@@ -8,8 +8,22 @@ const pool = new Pool({
   ssl: sslConfig,
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 10000,
 });
+
+
+const testConnection = async () => {
+  try {
+    const client = await pool.connect();
+    console.log("✅ Database connection successful!");
+    client.release();
+  } catch (error) {
+    console.error("❌ Database connection failed!", error);
+  }
+};
+
+
+testConnection();
 
 const query = async (text, params) => {
   const start = Date.now();

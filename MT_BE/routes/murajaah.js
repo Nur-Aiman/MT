@@ -3,6 +3,7 @@ var router = express.Router()
 const axios = require('axios');
 const moment = require('moment-timezone')
 const { query, pool } = require('../config/database')
+const nodemailer = require('nodemailer');
 
 //test
 
@@ -592,12 +593,94 @@ router.get('/tahajjud/check_today_completion', async (req, res) => {
 });
 
 
+// @desc Fetch highlighted Surahs and send a formatted text message
+// @route POST /sendtext
+// @access public
+router.post('/sendtext', async (req, res) => {
+  try {
+  
+    const highlightedSurahsResponse = await fetch(`${process.env.HOST}/murajaah/highlightedsurahs`);
+    const highlightedSurahs = await highlightedSurahsResponse.json();
+
+    console.log('🔹 Highlighted Surahs:', highlightedSurahs);
+    const topSurahs = highlightedSurahs.slice(0, 2);
+
+    
+    const surahMessage = topSurahs.length > 0
+      ? `Rak’ah 1: ${topSurahs[0]?.chapter_name || "No Surah Available"}\nRak’ah 2: ${topSurahs[1]?.chapter_name || "No Surah Available"}`
+      : "No highlighted Surahs available.";
+
+  
+    const finalMessage = `
+Muraja’ah Reminder
+
+${surahMessage}
+
+Please recite the Surahs above in your next Fard prayer.
+
+Once you have completed the recitation, kindly update your status in the Muraja’ah Tracker.
+    `;
+
+ 
+    let transporter = nodemailer.createTransport({
+      host: 'smtp.mail.yahoo.com',
+      port: 465, 
+      secure: true,
+      auth: {
+        user: 'nur_aiman71099@yahoo.com',     
+        pass: 'edwqyzebjrojeeys',          
+      },
+    });
+
+ 
+    const mailOptions = {
+      from: '"Muraja’ah Reminder" <nur_aiman71099@yahoo.com>',
+      to: 'nur_aiman71099@yahoo.com',
+      subject: 'Muraja’ah Reminder for Your Next Prayer',
+      text: finalMessage,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log('✅ Message sent:', info.messageId);
+
+    res.status(200).json({ message: 'Email sent successfully', highlightedSurahs });
+  } catch (error) {
+    console.error('❌ Error fetching Surahs or sending email:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
 
 
+// @desc Get Surahs with a lower Murajaah Count (highlighted in yellow), excluding Surah IDs 2 and 18
+// @route GET /murajaah/highlightedsurahs
+// @access public
+router.get('/highlightedsurahs', async (req, res) => {
+  try {
+    
+    const query = 'SELECT * FROM memorized_surah';
+    const result = await pool.query(query);
+    const surahs = result.rows;
 
+    if (surahs.length === 0) {
+      return res.status(200).json({ message: 'No surahs found' });
+    }
 
+    
+    const maxMurajaahCount = Math.max(...surahs.map(surah => surah.murajaah_counter));
 
+    
+    let highlightedSurahs = surahs.filter(
+      surah => surah.murajaah_counter < maxMurajaahCount && surah.id !== 2 && surah.id !== 18
+    );
 
+ 
+    highlightedSurahs.sort((a, b) => a.id - b.id);
 
+    res.status(200).json(highlightedSurahs);
+  } catch (error) {
+    console.error('Error fetching highlighted Surahs:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
 
 module.exports = router
