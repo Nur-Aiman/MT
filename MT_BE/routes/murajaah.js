@@ -623,12 +623,12 @@ Once you have completed the recitation, kindly update your status in the Murajaâ
 
  
     let transporter = nodemailer.createTransport({
-      host: 'smtp.mail.yahoo.com',
-      port: 465, 
+      host: process.env.SMTP_MAIL,
+      port: process.env.SMTP_PORT,
       secure: true,
       auth: {
-        user: 'nur_aiman71099@yahoo.com',     
-        pass: 'edwqyzebjrojeeys',          
+        user: process.env.YAHOO_MAIL,    
+        pass: process.env.YAHOO_APP_PASSWORD,           
       },
     });
 

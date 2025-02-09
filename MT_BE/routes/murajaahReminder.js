@@ -4,7 +4,7 @@ const axios = require('axios');
 const moment = require('moment-timezone');
 const nodemailer = require('nodemailer');
 const cron = require('node-cron'); 
-
+const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 const sendMurajaahEmail = async () => {
   try {
@@ -38,8 +38,8 @@ Murajaah Tracker : https://murajaah-tracker.onrender.com/
 
 
     let transporter = nodemailer.createTransport({
-      host: 'smtp.mail.yahoo.com',
-      port: 465, 
+      host: process.env.SMTP_MAIL,
+      port: process.env.SMTP_PORT, 
       secure: true,
       auth: {
         user: process.env.YAHOO_MAIL,                   
