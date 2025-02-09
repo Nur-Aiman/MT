@@ -30,10 +30,14 @@ jobs:
       run: npm install
       working-directory: ./MT_BE
 
+    - name: Install Heroku CLI
+      run: curl https://cli-assets.heroku.com/install-ubuntu.sh | sh
+
     - name: Fetch DATABASE_URL from Heroku
       env:
         HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
       run: |
+        heroku auth:token
         DATABASE_URL=$(heroku config:get DATABASE_URL -a aiman-db)
         echo "DATABASE_URL=${DATABASE_URL}" >> $GITHUB_ENV
 
