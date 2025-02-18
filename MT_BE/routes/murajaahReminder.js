@@ -62,10 +62,9 @@ Murajaah Tracker : https://murajaah-tracker.onrender.com/
   }
 };
 
-cron.schedule('*/30 * * * * *', sendMurajaahEmail, { timezone: 'Asia/Kuala_Lumpur' });
+// cron.schedule('*/30 * * * * *', sendMurajaahEmail, { timezone: 'Asia/Kuala_Lumpur' });
 
 
-/*
 const getPrayerTimes = async () => {
   try {
     const response = await axios.get('https://api.aladhan.com/v1/timingsByCity?city=Kuala%20Lumpur&country=Malaysia&method=3');
@@ -108,7 +107,7 @@ const schedulePrayerEmails = async () => {
 
 
 schedulePrayerEmails();
-*/
+
 
 // @desc Trigger email manually via API
 // @route POST /sendtext
