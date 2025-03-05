@@ -1,1 +1,1 @@
-web: cd MT_BE && npm start
+web: cd MT_BE && npm install && npm start
