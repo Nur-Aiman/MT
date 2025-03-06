@@ -15,13 +15,13 @@ router.get('/', function (req, res, next) {
 // @route POST /murajaah/addsurah
 // @access public
 router.post('/addsurah', (req, res) => {
-  const { id, chapter_name, total_verse, verse_memorized, juz } = req.body
+  const { id, chapter_name, total_verse, verse_memorized, juz, note } = req.body
 
   const query =
-    'INSERT INTO memorized_surah (id, chapter_name, total_verse, verse_memorized, juz) VALUES ($1, $2, $3, $4, $5)'
+    'INSERT INTO memorized_surah (id, chapter_name, total_verse, verse_memorized, juz, note) VALUES ($1, $2, $3, $4, $5, $6)'
   pool.query(
     query,
-    [id, chapter_name, total_verse, verse_memorized, juz],
+    [id, chapter_name, total_verse, verse_memorized, juz, note],
     (err, result) => {
       if (err) {
         console.error(err)
@@ -148,18 +148,18 @@ router.post('/addmurajaah', (req, res) => {
 // @route PUT /murajaah/updatesurah/:id
 // @access public
 router.put('/updatesurah/:id', (req, res) => {
-  const { id, chapter_name, total_verse, verse_memorized, juz } = req.body
+  const { id, chapter_name, total_verse, verse_memorized, juz, note } = req.body
   const surahId = req.params.id
 
   const updateQuery = `
     UPDATE memorized_surah
-    SET chapter_name = $1, total_verse = $2, verse_memorized = $3, juz = $4
-    WHERE id = $5
+    SET chapter_name = $1, total_verse = $2, verse_memorized = $3, juz = $4, note = $5
+    WHERE id = $6
   `
 
   pool.query(
     updateQuery,
-    [chapter_name, total_verse, verse_memorized, juz, surahId],
+    [chapter_name, total_verse, verse_memorized, juz, note, surahId],
     (err, result) => {
       if (err) {
         console.error(err)

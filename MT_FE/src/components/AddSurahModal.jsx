@@ -8,6 +8,7 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData }) {
     total_verse: '',
     verse_memorized: '',
     juz: '',
+    note: ''
   })
   const [isSuccess, setIsSuccess] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
@@ -79,6 +80,7 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData }) {
       total_verse: '',
       verse_memorized: '',
       juz: '',
+      note: ''
     })
     onClose()
     onSurahAdded()
@@ -129,6 +131,9 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData }) {
                 <strong>Chapter Name:</strong> {formData.chapter_name}
               </div>
               <div>
+                <strong>Note:</strong> {formData.note} 
+              </div>
+              <div>
                 <strong>Total Verses:</strong> {formData.total_verse}
               </div>
               <div>
@@ -151,6 +156,7 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData }) {
             {[
               { name: 'id', label: 'Chapter Number', type: 'number' },
               { name: 'chapter_name', label: 'Chapter Name', type: 'text' },
+              { name: 'note', label: 'Note', type: 'text' },
               { name: 'total_verse', label: 'Total Verses', type: 'number' },
               {
                 name: 'verse_memorized',
@@ -169,7 +175,7 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData }) {
                   name={field.name}
                   value={formData[field.name]}
                   onChange={handleInputChange}
-                  required
+                  required={field.name !== 'note'}
                   style={{
                     width: '95%',
                     padding: '10px',
