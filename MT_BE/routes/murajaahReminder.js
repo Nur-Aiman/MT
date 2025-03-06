@@ -62,7 +62,7 @@ Murajaah Tracker : https://murajaah-tracker.onrender.com/
   }
 };
 
-cron.schedule('*/30 * * * * *', sendMurajaahEmail, { timezone: 'Asia/Kuala_Lumpur' });
+// cron.schedule('*/30 * * * * *', sendMurajaahEmail, { timezone: 'Asia/Kuala_Lumpur' });
 
 
 const getPrayerTimes = async () => {
