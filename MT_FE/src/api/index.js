@@ -1,4 +1,4 @@
-export const HOST = 'https://murajaah-tracker-api-4ded06185bd3.herokuapp.com'
+export const HOST = 'https://murajaah-tracker-api.onrender.com'
 
 // local : http://localhost:8080
 // production : 
