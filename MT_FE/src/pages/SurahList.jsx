@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom';
 import AddSurahModal from '../components/AddSurahModal'
 import SabaqModal from '../components/SabaqModal'
 import LoginModal from '../components/LoginModal';
@@ -20,6 +21,8 @@ function SurahList() {
   const [weeklyProgress, setWeeklyProgress] = useState({})
   const [maxMurajaahCount, setMaxMurajaahCount] = useState(0);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchSurahs()
@@ -245,6 +248,21 @@ function SurahList() {
   isOpen={isTahajjudModalOpen}
   onClose={() => setIsTahajjudModalOpen(false)}
 />
+{/* 
+<button 
+  onClick={() => navigate('/tadabbur')}
+  style={{
+    marginLeft: '100px',
+    padding: '10px',
+    backgroundColor: '#ffd700',
+    border: 'none',
+    color: 'black',
+    borderRadius: '5px',
+  }}
+>
+  Tadabbur
+</button> */}
+
 
 
       {completionRate !== null && (

@@ -1,6 +1,101 @@
-import React, { useState, useEffect } from 'react'
-import { HOST } from '../api'
+import React, { useEffect, useMemo, useState } from 'react';
+import { HOST } from '../api';
 
+// ---------- helpers ----------
+const countArabicLetters = (input) => {
+  if (!input) return 0;
+  // strip diacritics
+  let s = input.replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g, '');
+  // strip tatweel
+  s = s.replace(/\u0640/g, '');
+  // keep Arabic letters only
+  s = s.replace(/[^ء-ي؀-ۿ]/g, '');
+  return s.length;
+};
+
+const fetchPageAyahs = async (pageNumber) => {
+  const res = await fetch(`https://api.alquran.cloud/v1/page/${pageNumber}/quran-uthmani`);
+  const json = await res.json();
+  if (!res.ok || !json?.data?.ayahs) throw new Error('Failed to fetch mushaf page');
+  return json.data.ayahs.map(a => ({
+    surah: a.surah.number,
+    verse: a.numberInSurah,
+    text: a.text,
+    letters: countArabicLetters(a.text),
+  }));
+};
+
+/** Split a page into 5 balanced sections (by letters), each section ends at a verse. */
+// Divide a page into up to 5 balanced, NON-EMPTY sections by letters.
+// Guarantees every section ends on a verse and leaves at least 1 ayah
+// for the remaining sections when possible. If the page has <5 ayahs,
+// you'll naturally get fewer than 5 sections (never empty ones).
+const divideIntoFiveSections = (ayahs) => {
+  const N = ayahs?.length || 0;
+  if (N === 0) return [];
+
+  const totalLetters = ayahs.reduce((s, a) => s + a.letters, 0);
+
+  const sections = [];
+  let start = 0;            // start index of current section
+  let usedLetters = 0;      // letters already assigned to previous sections
+
+  // Decide the first 4 cut points; the 5th section is the remainder
+  for (let s = 1; s <= 4 && start < N; s++) {
+    let remainingAyahs = N - start;
+    let remainingSections = 5 - s; // how many sections will remain AFTER we cut
+    if (remainingAyahs <= remainingSections) break; // must leave 1 ayah for each remaining section
+
+    // Dynamic target based on remaining letters and remaining sections (including this one)
+    const lettersLeft = totalLetters - usedLetters;
+    const target = lettersLeft / (remainingSections + 1);
+
+    let end = start;
+    let sum = ayahs[end].letters;
+
+    // extend until we hit target, but ensure we leave at least 1 ayah per remaining section
+    while (
+      end + 1 < N &&
+      sum < target &&
+      (N - (end + 1)) > remainingSections // keep at least 1 ayah for each remaining section
+    ) {
+      end++;
+      sum += ayahs[end].letters;
+    }
+
+    sections.push({ ayahs: ayahs.slice(start, end + 1), letters: sum });
+    usedLetters += sum;
+    start = end + 1;
+  }
+
+  // Remainder becomes the last section (if any)
+  if (start < N) {
+    const tail = ayahs.slice(start);
+    sections.push({
+      ayahs: tail,
+      letters: tail.reduce((s, a) => s + a.letters, 0),
+    });
+  }
+
+  // Cap to at most 5 sections
+  return sections.slice(0, 5);
+};
+
+const findSectionIndexByRange = (sections, surah, begin, end) => {
+  if (!sections?.length) return 0;
+  for (let i = 0; i < sections.length; i++) {
+    const ay = sections[i].ayahs;
+    if (!ay.length) continue;
+    const first = ay[0];
+    const last = ay[ay.length - 1];
+    if (first.surah === surah && first.verse <= begin && last.verse >= end) {
+      return i; // 0-based
+    }
+  }
+  return 0; // fallback
+};
+
+// ---------- component ----------
 const SabaqModal = ({ isOpen, onClose }) => {
   const [formData, setFormData] = useState({
     chapter_number: '',
@@ -11,401 +106,458 @@ const SabaqModal = ({ isOpen, onClose }) => {
     number_of_readings: 0,
     complete_memorization: false,
     murajaah_20_times: 0,
-  })
+  });
 
   const [showVerses, setShowVerses] = useState(false);
   const [verses, setVerses] = useState([]);
-
+  const [totalLetters, setTotalLetters] = useState(0);
+  const [versePages, setVersePages] = useState([]);
+  const [pageDetails, setPageDetails] = useState({ totalLettersOnPage: 0, sections: [] });
+  const [loadingAuto, setLoadingAuto] = useState(false);
+  const [errorText, setErrorText] = useState('');
 
   const handleChange = (e) => {
-    const { name, value } = e.target
-    setFormData((prevState) => ({ ...prevState, [name]: value }))
-  }
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]:
+        type === 'checkbox' ? checked :
+        name === 'number_of_readings' || name === 'murajaah_20_times'
+          ? Number(value)
+          : value
+    }));
+  };
 
+  // Load latest sabaq to rehydrate UI
   useEffect(() => {
-    if (isOpen) {
-      fetch(`${HOST}/murajaah/sabaqtracker/latest`)
-        .then((response) => response.json())
-        .then((data) => {
-          setFormData(data)
-          console.log('Fetched Data: ', data)
-        })
-        .catch((error) => {
-          console.error('Error fetching latest sabaq record', error)
-        })
-    }
-  }, [isOpen])
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    try {
-      const response = await fetch(`${HOST}/murajaah/sabaqtracker/add`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      })
-
-      const data = await response.json()
-
-      if (response.ok) {
-        alert(`Submitted successfully! \n\nDetails:\n
-        Chapter Number: ${formData.chapter_number}\n
-        Chapter Name: ${formData.chapter_name}\n
-        Page: ${formData.page}\n
-        Section: ${formData.section}\n
-        Verse: ${formData.verse}\n
-        Number of Readings: ${formData.number_of_readings}\n
-        Complete Memorization: ${formData.complete_memorization}\n
-        Murajaah 20 Times: ${formData.murajaah_20_times}\n`)
-      } else {
-        console.error('Error submitting data', data.message)
-        alert(data.message || 'Error')
-      }
-    } catch (error) {
-      console.error('Error submitting data', error)
-      alert('An error occurred while submitting.')
-    }
-  }
-
-  const handleBackgroundClick = (e) => {
-    onClose()
-  }
-
-  const handleContentClick = (e) => {
-    e.stopPropagation()
-  }
-
-  const handleViewVerseClick = async () => {
-    
-    if (!showVerses) { // Only fetch verses if they are about to be shown
-      const verseRange = formData.verse.split('-').map(num => num.trim());
-      const beginning = verseRange[0];
-      const ending = verseRange[1];
-      const surah = formData.chapter_number;
-      const apiUrl = `${HOST}/murajaah/surah/${surah}?beginning=${beginning}&ending=${ending}`;
-
+    if (!isOpen) return;
+    (async () => {
       try {
-        const response = await fetch(apiUrl);
-        const data = await response.json();
-        if (response.ok) {
-          setVerses(data.data.ayahs.map(ayah => `${ayah.text} - ${ayah.numberInSurah}`));
-          setShowVerses(true);
-        } else {
-          console.error('Error fetching verses', data.message);
-          alert(data.message || 'Error fetching verses');
+        const r = await fetch(`${HOST}/murajaah/sabaqtracker/latest`);
+        const data = await r.json();
+        if (r.ok && data) {
+          setFormData(prev => ({
+            ...prev,
+            chapter_number: data.chapter_number ?? '',
+            chapter_name: data.chapter_name ?? '',
+            page: data.page ?? '',
+            section: data.section ?? '',
+            verse: data.verse ?? '',
+            number_of_readings: data.number_of_readings ?? 0,
+            complete_memorization: !!data.complete_memorization,
+            murajaah_20_times: Number.isFinite(data.murajaah_20_times) ? data.murajaah_20_times : 0,
+          }));
+          // auto show verses
+          setTimeout(() => autoPopulateFromInputs(data.chapter_number, data.page, data.section, data.verse), 0);
         }
-      } catch (error) {
-        console.error('Error fetching verses', error);
-        alert('An error occurred while fetching verses. Please fill in chapter number (eg : 73) and verse range (eg : 1 - 3)');
+      } catch (e) {
+        // ignore
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  // auto-populate when user changes chapter/page/section
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!formData.chapter_number || !formData.page || !formData.section) return;
+    // If user typed all three, derive range
+    autoPopulateFromInputs(formData.chapter_number, formData.page, formData.section);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.chapter_number, formData.page, formData.section]);
+
+  const autoPopulateFromInputs = async (chapterNum, pageNum, sectionIdx, existingVerseRange) => {
+  try {
+    setLoadingAuto(true);
+    setErrorText('');
+
+    // 1) Fetch page + build sections (non-empty only)
+    const pageAyahs = await fetchPageAyahs(pageNum);
+    const sectionsAll = divideIntoFiveSections(pageAyahs);          // returns up to 5 non-empty sections
+    const sections = sectionsAll.filter(sec => sec.ayahs.length);   // guard (should already be non-empty)
+    const totalLettersOnPage = pageAyahs.reduce((s, a) => s + a.letters, 0);
+
+    // 2) Filter all ayahs on page that belong to the requested chapter
+    const chapterNumStr = String(chapterNum);
+    const filteredBySurah = pageAyahs.filter(a => String(a.surah) === chapterNumStr);
+
+    // 3) Fetch chapter name (if present on page)
+    let chapterName = '';
+    if (filteredBySurah.length) {
+      const nameRes = await fetch(`https://api.alquran.cloud/v1/surah/${chapterNum}`);
+      const nameJson = await nameRes.json();
+      if (nameRes.ok && nameJson?.data?.englishName) {
+        chapterName = nameJson.data.englishName;
+      }
+    }
+
+    // 4) Decide which section to use
+    let sectionNumber = Number(sectionIdx) || 1;
+
+    // If verse range is provided (rehydrating from DB), try to locate the matching section
+    if (existingVerseRange) {
+      const [b, e] = String(existingVerseRange).split('-').map(x => Number(String(x).trim()));
+      const idx0 = findSectionIndexByRange(sections, Number(chapterNum), b, e || b);
+      if (idx0 >= 0) sectionNumber = idx0 + 1;
+    }
+
+    // Clamp to available sections (avoid selecting an out-of-range section)
+    sectionNumber = Math.min(Math.max(1, sectionNumber), Math.max(1, sections.length));
+
+    // Prefer a section that actually contains ayahs from this chapter.
+    // If the chosen section has no ayah from the selected chapter, try to find the nearest one that does.
+    let chosen = sections[sectionNumber - 1];
+
+    const sectionHasChapterAyah = (sec) =>
+      sec?.ayahs?.some(a => String(a.surah) === chapterNumStr);
+
+    if (!sectionHasChapterAyah(chosen)) {
+      const idxWithChapter = sections.findIndex(sectionHasChapterAyah);
+      if (idxWithChapter !== -1) {
+        chosen = sections[idxWithChapter];
+        sectionNumber = idxWithChapter + 1;
+      }
+    }
+
+    // 5) Compute verse range for the chosen section, limited to the selected chapter when possible
+    let begin = 1, end = 1;
+
+    if (chosen && chosen.ayahs.length) {
+      const ayInThisChapter = chosen.ayahs.filter(a => String(a.surah) === chapterNumStr);
+
+      if (ayInThisChapter.length) {
+        begin = ayInThisChapter[0].verse;
+        end   = ayInThisChapter[ayInThisChapter.length - 1].verse;
+      } else if (filteredBySurah.length) {
+        // section contains only other surahs (rare when page crosses surahs) — use chapter span on this page
+        begin = filteredBySurah[0].verse;
+        end   = filteredBySurah[filteredBySurah.length - 1].verse;
+      }
+    } else if (filteredBySurah.length) {
+      // no chosen section (very short page) — use chapter span on this page
+      begin = filteredBySurah[0].verse;
+      end   = filteredBySurah[filteredBySurah.length - 1].verse;
+    }
+
+    // 6) Update form + verse preview
+    setFormData(prev => ({
+      ...prev,
+      chapter_number: String(chapterNum),
+      chapter_name: chapterName || prev.chapter_name,
+      page: String(pageNum),
+      section: String(sectionNumber),
+      verse: `${begin} - ${end}`,
+    }));
+
+    await showVersesForRange(chapterNum, begin, end, pageNum, totalLettersOnPage, sections);
+    setPageDetails({ totalLettersOnPage, sections });
+  } catch (e) {
+    setErrorText('Failed to auto-populate from inputs. Please check chapter/page/section.');
+  } finally {
+    setLoadingAuto(false);
+  }
+};
+
+
+  const showVersesForRange = async (surah, beginning, ending, pageNumFromInput, totalLettersOnPage, sections) => {
+    const url = `${HOST}/murajaah/surah/${surah}?beginning=${beginning}&ending=${ending}`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (!res.ok || !data?.data?.ayahs?.length) {
+      setShowVerses(false);
+      setVerses([]);
+      setTotalLetters(0);
+      setVersePages([]);
+      return;
+    }
+
+    const mapped = data.data.ayahs.map(ayah => ({
+      text: ayah.text,
+      numberInSurah: ayah.numberInSurah,
+      page: ayah.page,
+      letterCount: countArabicLetters(ayah.text),
+    }));
+
+    const total = mapped.reduce((s, a) => s + a.letterCount, 0);
+    const pages = [...new Set(mapped.map(a => a.page))];
+
+    setVerses(mapped);
+    setTotalLetters(total);
+    setVersePages(pages);
+    setShowVerses(true);
+
+    // if single page, ensure pageDetails is aligned
+    if (pages.length === 1) {
+      if (!totalLettersOnPage || !sections?.length) {
+        const pageAyahs = await fetchPageAyahs(pages[0]);
+        const lettersPage = pageAyahs.reduce((s, a) => s + a.letters, 0);
+        setPageDetails({ totalLettersOnPage: lettersPage, sections: divideIntoFiveSections(pageAyahs) });
       }
     } else {
-      setShowVerses(false);
-      setVerses([]); 
+      setPageDetails({ totalLettersOnPage: 0, sections: [] });
     }
   };
 
-  if (!isOpen) {
-    return null
-  }
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setErrorText('');
+    try {
+      const res = await fetch(`${HOST}/murajaah/sabaqtracker/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert('Submitted successfully!');
+      } else {
+        alert(data?.message || 'Error submitting');
+      }
+    } catch (err) {
+      setErrorText('Network error while submitting.');
+    }
+  };
+
+  if (!isOpen) return null;
 
   return (
-    <div style={modalStyles} onClick={handleBackgroundClick}>
-      <div style={modalContentStyles} onClick={handleContentClick}>
-        <h2
-          style={{ borderBottom: '2px solid #84a59d', paddingBottom: '10px' }}
-        >
-          Add Sabaq Record
-        </h2>
+    <div style={modalStyles} onClick={onClose}>
+      <div style={modalContentStyles} onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ borderBottom: '2px solid #84a59d', paddingBottom: '10px' }}>Add Sabaq Record</h2>
 
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <button onClick={handleViewVerseClick} style={viewVerseButtonStyles}>
-            {showVerses ? 'Hide Verse' : 'View Verse'}
-          </button>
-        </div>
-        {showVerses && verses.map((verse, index) => (
-          <div key={index} style={{ textAlign: 'center', marginBottom: '20px', fontSize: '25px' }}>{verse}</div>
-        ))}
-        <form onSubmit={handleSubmit} style={formStyles}>
-          <div className='inputGroup'>
+        {/* Inputs that drive auto-population */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+          <div>
             <label style={labelStyles}>Chapter Number</label>
             <input
-              name='chapter_number'
+              name="chapter_number"
               value={formData.chapter_number || ''}
               onChange={handleChange}
-              required
               style={inputStyles}
-            />
-
-            <label style={labelStyles}>Chapter Name</label>
-            <input
-              name='chapter_name'
-              value={formData.chapter_name || ''}
-              onChange={handleChange}
-              required
-              style={inputStyles}
+              placeholder="e.g. 2"
             />
           </div>
-          <div className='inputGroup'>
+          <div>
             <label style={labelStyles}>Page</label>
             <input
-              name='page'
+              name="page"
               value={formData.page || ''}
               onChange={handleChange}
-              required
               style={inputStyles}
+              placeholder="Mushaf page (1–604)"
             />
-
-            <label style={labelStyles}>Section</label>
+          </div>
+          <div>
+            <label style={labelStyles}>Section (1–5)</label>
             <input
-              name='section'
+              name="section"
               value={formData.section || ''}
-              onChange={handleChange}
-              required
+              onChange={(e) => {
+                const v = e.target.value.replace(/[^\d]/g, '');
+                if (!v) return setFormData(prev => ({ ...prev, section: '' }));
+                const n = Math.min(5, Math.max(1, Number(v)));
+                setFormData(prev => ({ ...prev, section: String(n) }));
+              }}
               style={inputStyles}
+              placeholder="1 to 5"
             />
           </div>
-          <div className='inputGroup'>
-            <label style={labelStyles}>Verse</label>
-            <input
-              name='verse'
-              value={formData.verse || ''}
-              onChange={handleChange}
-              required
-              style={inputStyles}
-            />
+        </div>
 
-            <label style={labelStyles}>Number of Readings</label>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              <button
-                type='button'
-                style={incrementButtonStyles}
-                onClick={() =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    number_of_readings: Math.max(
-                      prev.number_of_readings - 1,
-                      0
-                    ),
-                  }))
-                }
-              >
-                -
-              </button>
-              <input
-                name='number_of_readings'
-                value={formData.number_of_readings}
-                readOnly
-                style={{ ...inputStyles, width: '50px', textAlign: 'center' }}
-              />
-              <button
-                type='button'
-                style={incrementButtonStyles}
-                onClick={() =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    number_of_readings: prev.number_of_readings + 1,
-                  }))
-                }
-              >
-                +
-              </button>
-            </div>
-          </div>
-          <div style={{ marginBottom: '20px' }}>
-            <label
+        {loadingAuto && <div style={{ marginBottom: 10, color: '#555' }}>Loading verses…</div>}
+        {errorText && <div style={{ marginBottom: 10, color: '#b00020' }}>{errorText}</div>}
+
+        {/* Verses */}
+        {showVerses && (
+          <>
+            {verses.map((v, i) => (
+              <div key={i} style={{ textAlign: 'center', marginBottom: '12px', fontSize: '22px' }}>
+                {v.text} — {v.numberInSurah}
+                <div style={{ fontSize: '14px', color: '#555' }}>
+                  Letters: <strong>{v.letterCount}</strong> | Mushaf page: <strong>{v.page}</strong>
+                </div>
+              </div>
+            ))}
+
+            <div
               style={{
-                ...labelStyles,
-                display: 'flex',
-                alignItems: 'center',
-                marginTop: '10px',
-                marginBottom: '10px',
+                textAlign: 'center',
+                margin: '10px 0 16px',
+                padding: '8px 12px',
+                background: '#f1f5f9',
+                borderRadius: '6px',
+                fontWeight: 'bold',
               }}
             >
-              Complete Memorization
+              Total letters in range: {totalLetters}
+              <br />
+              Verse resides in Mushaf page{versePages.length > 1 ? 's' : ''}: {versePages.join(', ')}
+            </div>
+
+            {pageDetails.totalLettersOnPage > 0 && (
+  <div style={{ marginTop: 8, textAlign: 'left' }}>
+    <strong>Total letters in Mushaf page {versePages[0]}:</strong> {pageDetails.totalLettersOnPage}
+    <br />
+    <br />
+    {pageDetails.sections
+      .filter(sec => sec.ayahs.length)         // 🔸 hide empty sections
+      .map((sec, idx) => {
+        const first = sec.ayahs[0];
+        const last  = sec.ayahs[sec.ayahs.length - 1];
+        return (
+          <div key={idx} style={{ marginBottom: 6 }}>
+            Section {idx + 1} : Surah {first.surah} : Verse {first.verse} - {last.verse} (Letters: {sec.letters})
+          </div>
+        );
+      })}
+  </div>
+)}
+
+
+
+          </>
+        )}
+
+        {/* Auto-populated read-only fields */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 14 }}>
+          <div>
+            <label style={labelStyles}>Chapter Name</label>
+            <input name="chapter_name" value={formData.chapter_name || ''} readOnly style={inputStyles} />
+          </div>
+          <div>
+            <label style={labelStyles}>Verse Range</label>
+            <input name="verse" value={formData.verse || ''} readOnly style={inputStyles} />
+          </div>
+        </div>
+
+        {/* Original counters (restored) */}
+        <div style={{ marginTop: 12 }}>
+          <label style={labelStyles}>Number of Readings</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => setFormData(p => ({ ...p, number_of_readings: Math.max(0, (p.number_of_readings || 0) - 1) }))}
+              style={incBtn}
+            >−</button>
+            <input
+              type="number"
+              name="number_of_readings"
+              min="0"
+              value={formData.number_of_readings || 0}
+              onChange={handleChange}
+              style={{ ...inputStyles, width: 80, textAlign: 'center', margin: 0 }}
+            />
+            <button
+              type="button"
+              onClick={() => setFormData(p => ({ ...p, number_of_readings: (p.number_of_readings || 0) + 1 }))}
+              style={incBtn}
+            >+</button>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <input
-                type='checkbox'
-                name='complete_memorization'
-                style={{ width: '24px', height: '24px' }}
-                checked={formData.complete_memorization}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    complete_memorization: e.target.checked,
-                  })
-                }
+                type="checkbox"
+                name="complete_memorization"
+                checked={!!formData.complete_memorization}
+                onChange={(e) => setFormData(p => ({ ...p, complete_memorization: e.target.checked }))}
               />
+              Complete Memorization
             </label>
 
-            <label style={labelStyles}>Murajaah 20 Times</label>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>Murajaah 20 Times</span>
               <button
-                type='button'
-                style={incrementButtonStyles}
-                onClick={() =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    murajaah_20_times: Math.max(prev.murajaah_20_times - 1, 0),
-                  }))
-                }
-              >
-                -
-              </button>
+                type="button"
+                onClick={() => setFormData(p => ({ ...p, murajaah_20_times: Math.max(0, (p.murajaah_20_times || 0) - 1) }))}
+                style={incBtn}
+              >−</button>
               <input
-                name='murajaah_20_times'
-                value={formData.murajaah_20_times}
-                readOnly
-                style={{ ...inputStyles, width: '50px', textAlign: 'center' }}
+                type="number"
+                name="murajaah_20_times"
+                min="0"
+                max="20"
+                value={formData.murajaah_20_times || 0}
+                onChange={(e) => {
+                  const n = Math.max(0, Math.min(20, Number(e.target.value || 0)));
+                  setFormData(p => ({ ...p, murajaah_20_times: n }));
+                }}
+                style={{ ...inputStyles, width: 80, textAlign: 'center', margin: 0 }}
               />
               <button
-                type='button'
-                style={incrementButtonStyles}
-                onClick={() =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    murajaah_20_times: Math.min(prev.murajaah_20_times + 1, 20),
-                  }))
-                }
-              >
-                +
-              </button>
+                type="button"
+                onClick={() => setFormData(p => ({ ...p, murajaah_20_times: Math.min(20, (p.murajaah_20_times || 0) + 1) }))}
+                style={incBtn}
+              >+</button>
             </div>
           </div>
-          <button type='submit' style={submitButtonStyles}>
-            Submit
-          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ marginTop: 16 }}>
+          <button type="submit" style={submitButtonStyles}>Submit</button>
         </form>
 
-        <button onClick={onClose} style={closeButtonStyles}>
-          Close
-        </button>
+        <button onClick={onClose} style={closeButtonStyles}>Close</button>
       </div>
     </div>
-  )
-}
-const mediaQuery = '@media (max-width: 500px)'
+  );
+};
 
-const incrementButtonStyles = {
-  padding: '10px 20px',
-  fontSize: '20px',
-  margin: '0 5px',
-  backgroundColor: '#84a59d',
-  color: 'white',
-  border: 'none',
-  borderRadius: '5px',
-  cursor: 'pointer',
-  transition: '0.3s',
-  '&:hover': {
-    backgroundColor: '#6b8d85',
-  },
-  [mediaQuery]: {
-    fontSize: '18px',
-    padding: '8px 16px',
-  },
-}
-
-const labelStyles = {
-  fontWeight: 'bold',
-  marginBottom: '5px',
-  display: 'block',
-  [mediaQuery]: {
-    fontSize: '14px',
-  },
-}
-
-const viewVerseButtonStyles = {
-  marginTop: '10px',
-  marginBottom: '20px', 
-  padding: '10px 15px',
-  backgroundColor: '#84a59d', 
-  color: 'white',
-  border: 'none',
-  borderRadius: '5px',
-  cursor: 'pointer',
-  fontWeight: 'bold',
-  [mediaQuery]: {
-    fontSize: '14px',
-    padding: '8px 12px',
-  },
-}
+// ---------- styles ----------
+const mediaQuery = '@media (max-width: 500px)';
 
 const modalStyles = {
   position: 'fixed',
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
+  top: 0, left: 0, right: 0, bottom: 0,
   backgroundColor: 'rgba(0, 0, 0, 0.7)',
   display: 'flex',
   justifyContent: 'center',
   alignItems: 'center',
   zIndex: 1000,
-}
+};
 
 const modalContentStyles = {
   width: '70%',
-  maxWidth: '500px',
-  maxHeight: '80vh',
+  maxWidth: '640px',
+  maxHeight: '85vh',
   overflowY: 'auto',
   backgroundColor: '#fff',
   padding: '20px',
   borderRadius: '8px',
   boxSizing: 'border-box',
-  [mediaQuery]: {
-    width: '90%',
-  },
-}
+  [mediaQuery]: { width: '92%' },
+};
 
-const formStyles = {
-  display: 'flex',
-  flexDirection: 'column',
-}
+const labelStyles = { fontWeight: 'bold', marginBottom: '6px', display: 'block' };
+const inputStyles = { padding: '10px', border: '1px solid #ccc', borderRadius: '4px', width: '100%' };
 
-const inputStyles = {
-  padding: '10px',
-  border: '1px solid #ccc',
-  borderRadius: '4px',
-  width: '80%',
-  margin: '10px',
-  [mediaQuery]: {
-    fontSize: '14px',
-    padding: '8px',
-    width: '100%',
-  },
-}
-
-const checkboxLabelStyles = {
-  display: 'block',
-  marginBottom: '10px',
-}
+const incBtn = {
+  padding: '8px 12px',
+  background: '#84a59d',
+  border: 'none',
+  color: '#fff',
+  borderRadius: 6,
+  cursor: 'pointer'
+};
 
 const closeButtonStyles = {
-  marginTop: '20px',
+  marginTop: '16px',
   padding: '10px',
   backgroundColor: '#84a59d',
   border: 'none',
   color: 'white',
   borderRadius: '5px',
   cursor: 'pointer',
-  [mediaQuery]: {
-    fontSize: '14px',
-    padding: '8px',
-  },
-}
+};
 
 const submitButtonStyles = {
-  marginTop: '20px',
   padding: '10px',
-  backgroundColor: '#84a59d',
+  backgroundColor: '#2a9d8f',
   border: 'none',
   color: 'white',
   borderRadius: '5px',
   cursor: 'pointer',
-  [mediaQuery]: {
-    fontSize: '14px',
-    padding: '8px',
-  },
-}
+};
 
-export default SabaqModal
+export default SabaqModal;
