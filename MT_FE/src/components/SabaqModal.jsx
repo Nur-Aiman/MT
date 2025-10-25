@@ -327,43 +327,49 @@ const SabaqModal = ({ isOpen, onClose }) => {
         <h2 style={{ borderBottom: '2px solid #84a59d', paddingBottom: '10px' }}>Add Sabaq Record</h2>
 
         {/* Inputs that drive auto-population */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
-          <div>
-            <label style={labelStyles}>Chapter Number</label>
-            <input
-              name="chapter_number"
-              value={formData.chapter_number || ''}
-              onChange={handleChange}
-              style={inputStyles}
-              placeholder="e.g. 2"
-            />
-          </div>
-          <div>
-            <label style={labelStyles}>Page</label>
-            <input
-              name="page"
-              value={formData.page || ''}
-              onChange={handleChange}
-              style={inputStyles}
-              placeholder="Mushaf page (1–604)"
-            />
-          </div>
-          <div>
-            <label style={labelStyles}>Section (1–5)</label>
-            <input
-              name="section"
-              value={formData.section || ''}
-              onChange={(e) => {
-                const v = e.target.value.replace(/[^\d]/g, '');
-                if (!v) return setFormData(prev => ({ ...prev, section: '' }));
-                const n = Math.min(5, Math.max(1, Number(v)));
-                setFormData(prev => ({ ...prev, section: String(n) }));
-              }}
-              style={inputStyles}
-              placeholder="1 to 5"
-            />
-          </div>
-        </div>
+        {/* Inputs that drive auto-population (stacked vertically & centered) */}
+<div style={inputsContainer}>
+  <div style={inputsStack}>
+    <div>
+      <label style={labelStyles}>Chapter Number</label>
+      <input
+        name="chapter_number"
+        value={formData.chapter_number || ''}
+        onChange={handleChange}
+        style={inputStyles}
+        placeholder="e.g. 2"
+      />
+    </div>
+
+    <div>
+      <label style={labelStyles}>Page</label>
+      <input
+        name="page"
+        value={formData.page || ''}
+        onChange={handleChange}
+        style={inputStyles}
+        placeholder="Mushaf page (1–604)"
+      />
+    </div>
+
+    <div>
+      <label style={labelStyles}>Section (1–5)</label>
+      <input
+        name="section"
+        value={formData.section || ''}
+        onChange={(e) => {
+          const v = e.target.value.replace(/[^\d]/g, '');
+          if (!v) return setFormData(prev => ({ ...prev, section: '' }));
+          const n = Math.min(5, Math.max(1, Number(v)));
+          setFormData(prev => ({ ...prev, section: String(n) }));
+        }}
+        style={inputStyles}
+        placeholder="1 to 5"
+      />
+    </div>
+  </div>
+</div>
+
 
         {loadingAuto && <div style={{ marginBottom: 10, color: '#555' }}>Loading verses…</div>}
         {errorText && <div style={{ marginBottom: 10, color: '#b00020' }}>{errorText}</div>}
@@ -432,67 +438,104 @@ const SabaqModal = ({ isOpen, onClose }) => {
         </div>
 
         {/* Original counters (restored) */}
-        <div style={{ marginTop: 12 }}>
-          <label style={labelStyles}>Number of Readings</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => setFormData(p => ({ ...p, number_of_readings: Math.max(0, (p.number_of_readings || 0) - 1) }))}
-              style={incBtn}
-            >−</button>
-            <input
-              type="number"
-              name="number_of_readings"
-              min="0"
-              value={formData.number_of_readings || 0}
-              onChange={handleChange}
-              style={{ ...inputStyles, width: 80, textAlign: 'center', margin: 0 }}
-            />
-            <button
-              type="button"
-              onClick={() => setFormData(p => ({ ...p, number_of_readings: (p.number_of_readings || 0) + 1 }))}
-              style={incBtn}
-            >+</button>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <input
-                type="checkbox"
-                name="complete_memorization"
-                checked={!!formData.complete_memorization}
-                onChange={(e) => setFormData(p => ({ ...p, complete_memorization: e.target.checked }))}
-              />
-              Complete Memorization
-            </label>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span>Murajaah 20 Times</span>
-              <button
-                type="button"
-                onClick={() => setFormData(p => ({ ...p, murajaah_20_times: Math.max(0, (p.murajaah_20_times || 0) - 1) }))}
-                style={incBtn}
-              >−</button>
-              <input
-                type="number"
-                name="murajaah_20_times"
-                min="0"
-                max="20"
-                value={formData.murajaah_20_times || 0}
-                onChange={(e) => {
-                  const n = Math.max(0, Math.min(20, Number(e.target.value || 0)));
-                  setFormData(p => ({ ...p, murajaah_20_times: n }));
-                }}
-                style={{ ...inputStyles, width: 80, textAlign: 'center', margin: 0 }}
-              />
-              <button
-                type="button"
-                onClick={() => setFormData(p => ({ ...p, murajaah_20_times: Math.min(20, (p.murajaah_20_times || 0) + 1) }))}
-                style={incBtn}
-              >+</button>
-            </div>
-          </div>
+        {/* Centered Progress Controls */}
+{/* Centered Progress Controls */}
+<div style={controlsWrapper}>
+  <div style={controlsGroup}>
+    {/* Left column: Number of Readings (top) + Complete Memorization (under it) */}
+    <div style={stackCol}>
+      {/* Number of Readings */}
+      <div style={controlCard}>
+        <div style={controlTitle}>Number of Readings</div>
+        <div style={counterRow}>
+          <button
+            type="button"
+            onClick={() =>
+              setFormData(p => ({ ...p, number_of_readings: Math.max(0, (p.number_of_readings || 0) - 1) }))
+            }
+            style={stepBtn}
+          >
+            −
+          </button>
+          <input
+            type="number"
+            name="number_of_readings"
+            min="0"
+            value={formData.number_of_readings || 0}
+            onChange={handleChange}
+            style={counterInput}
+          />
+          <button
+            type="button"
+            onClick={() =>
+              setFormData(p => ({ ...p, number_of_readings: (p.number_of_readings || 0) + 1 }))
+            }
+            style={stepBtn}
+          >
+            +
+          </button>
         </div>
+      </div>
+
+      {/* Complete Memorization (under Number of Readings) */}
+      <div style={controlCard}>
+        <div style={controlTitle}>Complete Memorization</div>
+        <label style={toggleRow}>
+          <input
+            type="checkbox"
+            name="complete_memorization"
+            checked={!!formData.complete_memorization}
+            onChange={(e) => setFormData(p => ({ ...p, complete_memorization: e.target.checked }))}
+          />
+          <span>Mark as Completed</span>
+        </label>
+      </div>
+
+      <div style={controlCard}>
+      <div style={controlTitle}>Murajaah 20 Times</div>
+      <div style={counterRow}>
+        <button
+          type="button"
+          onClick={() =>
+            setFormData(p => ({ ...p, murajaah_20_times: Math.max(0, (p.murajaah_20_times || 0) - 1) }))
+          }
+          style={stepBtn}
+        >
+          −
+        </button>
+        <input
+          type="number"
+          name="murajaah_20_times"
+          min="0"
+          max="20"
+          value={formData.murajaah_20_times || 0}
+          onChange={(e) => {
+            const n = Math.max(0, Math.min(20, Number(e.target.value || 0)));
+            setFormData(p => ({ ...p, murajaah_20_times: n }));
+          }}
+          style={counterInput}
+        />
+        <button
+          type="button"
+          onClick={() =>
+            setFormData(p => ({ ...p, murajaah_20_times: Math.min(20, (p.murajaah_20_times || 0) + 1) }))
+          }
+          style={stepBtn}
+        >
+          +
+        </button>
+      </div>
+    </div>
+
+
+    </div>
+
+    {/* Right column: Murajaah 20 Times */}
+    
+  </div>
+</div>
+
+
 
         <form onSubmit={handleSubmit} style={{ marginTop: 16 }}>
           <button type="submit" style={submitButtonStyles}>Submit</button>
@@ -518,9 +561,9 @@ const modalStyles = {
 };
 
 const modalContentStyles = {
-  width: '70%',
-  maxWidth: '640px',
-  maxHeight: '85vh',
+  width: '90%',
+  maxWidth: '960px',
+  maxHeight: '88vh',
   overflowY: 'auto',
   backgroundColor: '#fff',
   padding: '20px',
@@ -540,6 +583,99 @@ const incBtn = {
   borderRadius: 6,
   cursor: 'pointer'
 };
+const stackCol = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 12,
+  alignItems: 'stretch',
+  justifyContent: 'flex-start',
+};
+
+const controlsWrapper = {
+  display: 'flex',
+  justifyContent: 'center',
+  width: '100%',
+  marginTop: 16,
+};
+
+const controlsGroup = {
+  display: 'flex',
+  justifyContent: 'center',
+  alignItems: 'stretch',
+  gap: 16,
+  flexWrap: 'wrap',
+  maxWidth: 860,
+};
+
+const controlCard = {
+  minWidth: 220,
+  background: '#f8fafc',
+  border: '1px solid #e2e8f0',
+  borderRadius: 12,
+  padding: '14px 16px',
+  textAlign: 'center',
+  boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+};
+
+const controlTitle = {
+  fontWeight: 600,
+  marginBottom: 8,
+  color: '#0f172a',
+};
+
+const counterRow = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+};
+
+const stepBtn = {
+  padding: '8px 12px',
+  background: '#84a59d',
+  border: 'none',
+  color: '#fff',
+  borderRadius: 8,
+  cursor: 'pointer',
+  fontSize: 16,
+  lineHeight: 1,
+};
+
+const counterInput = {
+  width: 80,
+  textAlign: 'center',
+  padding: '8px 10px',
+  border: '1px solid #cbd5e1',
+  borderRadius: 8,
+  margin: 0,
+};
+
+const toggleRow = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 10,
+  padding: '6px 10px',
+  background: '#ffffff',
+  border: '1px solid #e2e8f0',
+  borderRadius: 8,
+  justifyContent: 'center',
+};
+
+const inputsContainer = {
+  display: 'flex',
+  justifyContent: 'center',
+  marginBottom: 12,
+};
+
+const inputsStack = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 12,
+  width: '100%',
+  maxWidth: 720,      // tweak as you like
+};
+
+
 
 const closeButtonStyles = {
   marginTop: '16px',
