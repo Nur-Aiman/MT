@@ -115,6 +115,7 @@ const SabaqModal = ({ isOpen, onClose }) => {
   const [pageDetails, setPageDetails] = useState({ totalLettersOnPage: 0, sections: [] });
   const [loadingAuto, setLoadingAuto] = useState(false);
   const [errorText, setErrorText] = useState('');
+  const [pageChapterRange, setPageChapterRange] = useState(null);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -289,14 +290,25 @@ const SabaqModal = ({ isOpen, onClose }) => {
 
     // if single page, ensure pageDetails is aligned
     if (pages.length === 1) {
-      if (!totalLettersOnPage || !sections?.length) {
-        const pageAyahs = await fetchPageAyahs(pages[0]);
-        const lettersPage = pageAyahs.reduce((s, a) => s + a.letters, 0);
-        setPageDetails({ totalLettersOnPage: lettersPage, sections: divideIntoFiveSections(pageAyahs) });
-      }
-    } else {
-      setPageDetails({ totalLettersOnPage: 0, sections: [] });
-    }
+  const pageAyahs = await fetchPageAyahs(pages[0]);
+  const lettersPage = pageAyahs.reduce((s, a) => s + a.letters, 0);
+  setPageDetails({ totalLettersOnPage: lettersPage, sections: divideIntoFiveSections(pageAyahs) });
+
+  // 🔸 compute begin/end verse for the selected surah on this page
+  const chapterNumStr = String(surah);
+  const onThisPageForSurah = pageAyahs.filter(a => String(a.surah) === chapterNumStr);
+  if (onThisPageForSurah.length) {
+    const beginV = onThisPageForSurah[0].verse;
+    const endV   = onThisPageForSurah[onThisPageForSurah.length - 1].verse;
+    setPageChapterRange({ page: pages[0], begin: beginV, end: endV });
+  } else {
+    setPageChapterRange(null);
+  }
+} else {
+  setPageDetails({ totalLettersOnPage: 0, sections: [] });
+  setPageChapterRange(null);
+}
+
   };
 
   const handleSubmit = async (e) => {
@@ -377,6 +389,23 @@ const SabaqModal = ({ isOpen, onClose }) => {
         {/* Verses */}
         {showVerses && (
           <>
+          {pageChapterRange && (
+  <div
+    style={{
+      textAlign: 'center',
+      margin: '8px 0 14px',
+      padding: '8px 12px',
+      background: '#eef2f7',
+      borderRadius: 6,
+      fontSize: 16,
+      color: '#334155',
+      fontWeight: 600,
+    }}
+  >
+    Mushaf page {pageChapterRange.page}: Surah {formData.chapter_name || formData.chapter_number} — verses {pageChapterRange.begin} – {pageChapterRange.end}
+  </div>
+)}
+
             {verses.map((v, i) => (
               <div key={i} style={{ textAlign: 'center', marginBottom: '12px', fontSize: '22px' }}>
                 {v.text} — {v.numberInSurah}
@@ -386,7 +415,7 @@ const SabaqModal = ({ isOpen, onClose }) => {
               </div>
             ))}
 
-            <div
+            {/* <div
               style={{
                 textAlign: 'center',
                 margin: '10px 0 16px',
@@ -399,31 +428,31 @@ const SabaqModal = ({ isOpen, onClose }) => {
               Total letters in range: {totalLetters}
               <br />
               Verse resides in Mushaf page{versePages.length > 1 ? 's' : ''}: {versePages.join(', ')}
-            </div>
+            </div> */}
 
             {pageDetails.totalLettersOnPage > 0 && (
-  <div style={{ marginTop: 8, textAlign: 'left' }}>
-    <strong>Total letters in Mushaf page {versePages[0]}:</strong> {pageDetails.totalLettersOnPage}
-    <br />
-    <br />
-    {pageDetails.sections
-      .filter(sec => sec.ayahs.length)         // 🔸 hide empty sections
-      .map((sec, idx) => {
-        const first = sec.ayahs[0];
-        const last  = sec.ayahs[sec.ayahs.length - 1];
-        return (
-          <div key={idx} style={{ marginBottom: 6 }}>
-            Section {idx + 1} : Surah {first.surah} : Verse {first.verse} - {last.verse} (Letters: {sec.letters})
-          </div>
-        );
-      })}
-  </div>
-)}
+                 <div style={{ marginTop: 8, textAlign: 'left' }}>
+               {/* <strong>Total letters in Mushaf page {versePages[0]}:</strong> {pageDetails.totalLettersOnPage} */}
+               <br />
+                      <br />
+                 {/* {pageDetails.sections
+                .filter(sec => sec.ayahs.length)         // 🔸 hide empty sections
+               .map((sec, idx) => {
+                 const first = sec.ayahs[0];
+                   const last  = sec.ayahs[sec.ayahs.length - 1];
+                  return (
+                     <div key={idx} style={{ marginBottom: 6 }}>
+                  Section {idx + 1} : Surah {first.surah} : Verse {first.verse} - {last.verse} (Letters: {sec.letters})
+                </div>
+               );
+                })} */}
+                 </div>
+               )}
 
 
 
-          </>
-        )}
+                 </>
+         )}
 
         {/* Auto-populated read-only fields */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 14 }}>
@@ -538,10 +567,19 @@ const SabaqModal = ({ isOpen, onClose }) => {
 
 
         <form onSubmit={handleSubmit} style={{ marginTop: 16 }}>
-          <button type="submit" style={submitButtonStyles}>Submit</button>
-        </form>
+  <div style={actionsRow}>
+    <button type="button" onClick={onClose} style={closeButtonStyles}>
+      Close
+    </button>
+    <button type="submit" style={submitButtonStyles}>
+      Submit
+    </button>
+  </div>
+</form>
 
-        <button onClick={onClose} style={closeButtonStyles}>Close</button>
+
+
+        
       </div>
     </div>
   );
@@ -675,10 +713,18 @@ const inputsStack = {
   maxWidth: 720,      // tweak as you like
 };
 
+const actionsRow = {
+  display: 'flex',
+  justifyContent: 'center',
+  alignItems: 'center',
+  gap: 12,
+  marginTop: 16,     // moved from Close button
+};
+
 
 
 const closeButtonStyles = {
-  marginTop: '16px',
+  /* marginTop: '16px',  <-- delete this line */
   padding: '10px',
   backgroundColor: '#84a59d',
   border: 'none',
@@ -686,6 +732,7 @@ const closeButtonStyles = {
   borderRadius: '5px',
   cursor: 'pointer',
 };
+
 
 const submitButtonStyles = {
   padding: '10px',
