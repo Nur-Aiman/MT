@@ -172,17 +172,17 @@ const SabaqModal = ({ isOpen, onClose }) => {
     setLoadingAuto(true);
     setErrorText('');
 
-    // 1) Fetch page + build sections (non-empty only)
+    // 1️⃣ Fetch page + build sections (non-empty only)
     const pageAyahs = await fetchPageAyahs(pageNum);
-    const sectionsAll = divideIntoFiveSections(pageAyahs);          // returns up to 5 non-empty sections
-    const sections = sectionsAll.filter(sec => sec.ayahs.length);   // guard (should already be non-empty)
+    const sectionsAll = divideIntoFiveSections(pageAyahs); // returns up to 5 sections
+    const sections = sectionsAll.filter(sec => sec.ayahs.length);
     const totalLettersOnPage = pageAyahs.reduce((s, a) => s + a.letters, 0);
 
-    // 2) Filter all ayahs on page that belong to the requested chapter
+    // 2️⃣ Filter ayahs on this page belonging to the selected chapter
     const chapterNumStr = String(chapterNum);
     const filteredBySurah = pageAyahs.filter(a => String(a.surah) === chapterNumStr);
 
-    // 3) Fetch chapter name (if present on page)
+    // 3️⃣ Fetch chapter name
     let chapterName = '';
     if (filteredBySurah.length) {
       const nameRes = await fetch(`https://api.alquran.cloud/v1/surah/${chapterNum}`);
@@ -192,72 +192,64 @@ const SabaqModal = ({ isOpen, onClose }) => {
       }
     }
 
-    // 4) Decide which section to use
-    let sectionNumber = Number(sectionIdx) || 1;
+    // 4️⃣ Determine selected sections
+    let selected = parseSections(sectionIdx);
+    if (!selected.length) selected = [1]; // default if none selected
 
-    // If verse range is provided (rehydrating from DB), try to locate the matching section
-    if (existingVerseRange) {
-      const [b, e] = String(existingVerseRange).split('-').map(x => Number(String(x).trim()));
-      const idx0 = findSectionIndexByRange(sections, Number(chapterNum), b, e || b);
-      if (idx0 >= 0) sectionNumber = idx0 + 1;
+    // Clamp within range
+    const maxAvailable = Math.max(1, sections.length);
+    selected = selected.filter(n => n >= 1 && n <= maxAvailable);
+
+    // Ensure contiguity if multiple selected
+    if (!isContiguous(selected)) {
+      const min = selected[0];
+      const max = selected[selected.length - 1];
+      selected = Array.from({ length: max - min + 1 }, (_, i) => min + i);
     }
 
-    // Clamp to available sections (avoid selecting an out-of-range section)
-    sectionNumber = Math.min(Math.max(1, sectionNumber), Math.max(1, sections.length));
-
-    // Prefer a section that actually contains ayahs from this chapter.
-    // If the chosen section has no ayah from the selected chapter, try to find the nearest one that does.
-    let chosen = sections[sectionNumber - 1];
-
-    const sectionHasChapterAyah = (sec) =>
-      sec?.ayahs?.some(a => String(a.surah) === chapterNumStr);
-
-    if (!sectionHasChapterAyah(chosen)) {
-      const idxWithChapter = sections.findIndex(sectionHasChapterAyah);
-      if (idxWithChapter !== -1) {
-        chosen = sections[idxWithChapter];
-        sectionNumber = idxWithChapter + 1;
-      }
-    }
-
-    // 5) Compute verse range for the chosen section, limited to the selected chapter when possible
+    // 5️⃣ Compute verse range across selected sections for this surah
     let begin = 1, end = 1;
+    const ayInChosenSections = [];
 
-    if (chosen && chosen.ayahs.length) {
-      const ayInThisChapter = chosen.ayahs.filter(a => String(a.surah) === chapterNumStr);
+    selected.forEach(idx => {
+      const sec = sections[idx - 1];
+      if (!sec?.ayahs?.length) return;
+      sec.ayahs.forEach(a => {
+        if (String(a.surah) === chapterNumStr) ayInChosenSections.push(a);
+      });
+    });
 
-      if (ayInThisChapter.length) {
-        begin = ayInThisChapter[0].verse;
-        end   = ayInThisChapter[ayInThisChapter.length - 1].verse;
-      } else if (filteredBySurah.length) {
-        // section contains only other surahs (rare when page crosses surahs) — use chapter span on this page
-        begin = filteredBySurah[0].verse;
-        end   = filteredBySurah[filteredBySurah.length - 1].verse;
-      }
+    if (ayInChosenSections.length) {
+      begin = ayInChosenSections[0].verse;
+      end = ayInChosenSections[ayInChosenSections.length - 1].verse;
     } else if (filteredBySurah.length) {
-      // no chosen section (very short page) — use chapter span on this page
       begin = filteredBySurah[0].verse;
-      end   = filteredBySurah[filteredBySurah.length - 1].verse;
+      end = filteredBySurah[filteredBySurah.length - 1].verse;
     }
 
-    // 6) Update form + verse preview
+    // 6️⃣ Save back into formData
+    const sectionStr = selected.join(',');
     setFormData(prev => ({
       ...prev,
       chapter_number: String(chapterNum),
       chapter_name: chapterName || prev.chapter_name,
       page: String(pageNum),
-      section: String(sectionNumber),
+      section: sectionStr,
       verse: `${begin} - ${end}`,
     }));
 
+    // 7️⃣ Display verse range preview
     await showVersesForRange(chapterNum, begin, end, pageNum, totalLettersOnPage, sections);
     setPageDetails({ totalLettersOnPage, sections });
+
   } catch (e) {
+    console.error(e);
     setErrorText('Failed to auto-populate from inputs. Please check chapter/page/section.');
   } finally {
     setLoadingAuto(false);
   }
 };
+
 
 
   const showVersesForRange = async (surah, beginning, ending, pageNumFromInput, totalLettersOnPage, sections) => {
@@ -331,6 +323,38 @@ const SabaqModal = ({ isOpen, onClose }) => {
     }
   };
 
+  // Parse "section" string -> [1,2,...]
+// const parseSections = (val) =>
+//   String(val || '')
+//     .split(',')
+//     .map(s => Number(String(s).trim()))
+//     .filter(Boolean)
+//     .sort((a,b) => a - b);
+
+// Build "1,2,...,k"
+const buildSequential = (k) => Array.from({length: Math.max(0, k)}, (_, i) => String(i+1)).join(',');
+
+// If user toggles n: checking -> 1..n, unchecking -> 1..(n-1)
+const toggleSequential = (currentStr, n, checked) => {
+  const k = checked ? n : (n - 1);
+  return buildSequential(k);
+};
+
+// turn "1,3,4" -> [1,3,4]
+const parseSections = (val) =>
+  String(val || '')
+    .split(',')
+    .map(s => Number(String(s).trim()))
+    .filter(Boolean)
+    .sort((a, b) => a - b);
+
+const isContiguous = (arr) =>
+  arr.length <= 1 ? true : (arr[arr.length - 1] - arr[0] + 1) === arr.length;
+
+const toRangeString = (min, max) =>
+  Array.from({ length: max - min + 1 }, (_, i) => String(min + i)).join(',');
+
+
   if (!isOpen) return null;
 
   return (
@@ -364,21 +388,91 @@ const SabaqModal = ({ isOpen, onClose }) => {
       />
     </div>
 
+
+
+
     <div>
-      <label style={labelStyles}>Section (1–5)</label>
-      <input
-        name="section"
-        value={formData.section || ''}
-        onChange={(e) => {
-          const v = e.target.value.replace(/[^\d]/g, '');
-          if (!v) return setFormData(prev => ({ ...prev, section: '' }));
-          const n = Math.min(5, Math.max(1, Number(v)));
-          setFormData(prev => ({ ...prev, section: String(n) }));
-        }}
-        style={inputStyles}
-        placeholder="1 to 5"
-      />
-    </div>
+  <label style={labelStyles}>Sections</label>
+  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+    {[1, 2, 3, 4, 5].map((n) => {
+      const sel = parseSections(formData.section);
+      const selected = sel.includes(n);
+      const minSel = sel[0];
+      const maxSel = sel[sel.length - 1];
+
+      return (
+        <label
+          key={n}
+          style={{
+            padding: '8px 12px',
+            border: '1px solid #cbd5e1',
+            borderRadius: 8,
+            cursor: 'pointer',
+            userSelect: 'none',
+            fontWeight: 600,
+            background: selected ? '#2a9d8f' : '#fff',
+            color: selected ? '#fff' : '#0f172a',
+            borderColor: selected ? '#2a9d8f' : '#cbd5e1',
+          }}
+        >
+          <input
+            type="checkbox"
+            value={n}
+            checked={selected}
+            onChange={(e) => {
+              setFormData(prev => {
+                const current = parseSections(prev.section);
+
+                // CHECKING a box
+                if (e.target.checked) {
+                  if (current.length === 0) {
+                    // single selection can be ANY section
+                    return { ...prev, section: String(n) };
+                  }
+                  // add n and enforce contiguity by filling the gap(s)
+                  const min = Math.min(...current, n);
+                  const max = Math.max(...current, n);
+                  return { ...prev, section: toRangeString(min, max) };
+                }
+
+                // UNCHECKING a box
+                // If currently single -> go empty
+                if (current.length === 1) {
+                  return { ...prev, section: '' };
+                }
+
+                // For multi-select, only allow removing an EDGE to keep contiguity.
+                const min = minSel;
+                const max = maxSel;
+                if (n === max) {
+                  // trim from the right
+                  return { ...prev, section: max - 1 >= min ? toRangeString(min, max - 1) : '' };
+                }
+                if (n === min) {
+                  // trim from the left
+                  return { ...prev, section: min + 1 <= max ? toRangeString(min + 1, max) : '' };
+                }
+
+                // middle uncheck => ignore to keep contiguous selection
+                return prev;
+              });
+            }}
+            style={{ display: 'none' }}
+          />
+          {`Section ${n}`}
+        </label>
+      );
+    })}
+  </div>
+</div>
+
+
+
+
+
+
+
+
   </div>
 </div>
 
@@ -742,5 +836,24 @@ const submitButtonStyles = {
   borderRadius: '5px',
   cursor: 'pointer',
 };
+
+const sectionGroup = { display: 'flex', gap: 8, flexWrap: 'wrap' };
+const sectionBox = {
+  padding: '8px 12px',
+  border: '1px solid #cbd5e1',
+  borderRadius: 8,
+  cursor: 'pointer',
+  userSelect: 'none',
+  fontWeight: 600,
+  background: '#fff',
+  color: '#0f172a',
+};
+const sectionBoxActive = {
+  background: '#2a9d8f',
+  color: '#ffffff',
+  borderColor: '#2a9d8f',
+};
+
+
 
 export default SabaqModal;
