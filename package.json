@@ -24,6 +24,7 @@
     "node-fetch": "^3.3.2",
     "nodemailer": "^6.10.0",
     "nodemon": "^3.0.3",
-    "pg": "^8.11.3"
+    "pg": "^8.11.3",
+    "react-router-dom": "^6.30.0"
   }
 }

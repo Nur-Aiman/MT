@@ -1,7 +1,8 @@
 import React from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import SurahList from './pages/SurahList'
-import Tadabbur from './pages/Tadabbur' // Create this file/component
+import Tadabbur from './pages/Tadabbur' 
+import Login from './pages/Login'
 
 function App() {
   return (
@@ -10,8 +11,9 @@ function App() {
         <header className='App-header'></header>
         <main>
           <Routes>
-            <Route path='/' element={<SurahList />} />
+            <Route path='/surahList' element={<SurahList />} />
             <Route path='/tadabbur' element={<Tadabbur />} />
+            <Route path='/' element={<Login />} />
           </Routes>
         </main>
       </div>

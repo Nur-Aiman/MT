@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { HOST } from '../api'
 
-function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData }) {
+function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData, userId }) {
   const [formData, setFormData] = useState({
     id: '',
     chapter_name: '',
     total_verse: '',
     verse_memorized: '',
     juz: '',
-    note: ''
+    note: '',
   })
   const [isSuccess, setIsSuccess] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
@@ -22,49 +22,73 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData }) {
     }
   }, [initialData])
 
+  const withUserHeaders = (headers = {}) => ({
+    ...headers,
+    'x-user-id': String(userId),
+  })
+
   const handleInputChange = (e) => {
     const { name, value } = e.target
-    setFormData({
-      ...formData,
+    setFormData((prev) => ({
+      ...prev,
       [name]: value,
-    })
+    }))
   }
 
   const handleSubmit = (e) => {
     e.preventDefault()
+
+    if (!userId) {
+      alert('User not logged in. Please login again.')
+      return
+    }
 
     const endpoint = isEditMode
       ? `${HOST}/murajaah/updatesurah/${formData.id}`
       : `${HOST}/murajaah/addsurah`
     const method = isEditMode ? 'PUT' : 'POST'
 
+    // optional: also include user_id in body (backend accepts it too)
+    const payload = { ...formData, user_id: userId }
+
     fetch(endpoint, {
-      method: method,
-      headers: {
+      method,
+      headers: withUserHeaders({
         'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(formData),
+      }),
+      body: JSON.stringify(payload),
     })
-      .then((res) => res.json())
+      .then(async (res) => {
+        // your endpoints return json (addsurah/updatesurah) in your controller
+        const data = await res.json().catch(() => null)
+        if (!res.ok) throw new Error(data?.message || 'Request failed')
+        return data
+      })
       .then((data) => {
-        console.log('Surah action completed:', data.message)
+        console.log('Surah action completed:', data?.message)
         setIsSuccess(true)
       })
       .catch((error) => console.error('An error occurred:', error))
   }
 
   const handleDeleteSurah = () => {
-    if (
-      window.confirm(
-        `Are you sure you want to delete surah ${formData.chapter_name}?`
-      )
-    ) {
+    if (!userId) {
+      alert('User not logged in. Please login again.')
+      return
+    }
+
+    if (window.confirm(`Are you sure you want to delete surah ${formData.chapter_name}?`)) {
       fetch(`${HOST}/murajaah/deletesurah/${formData.id}`, {
         method: 'DELETE',
+        headers: withUserHeaders(),
       })
-        .then((res) => res.json())
+        .then(async (res) => {
+          const data = await res.json().catch(() => null)
+          if (!res.ok) throw new Error(data?.message || 'Delete failed')
+          return data
+        })
         .then((data) => {
-          console.log('Surah deletion completed:', data.message)
+          console.log('Surah deletion completed:', data?.message)
           onClose()
           onSurahAdded()
         })
@@ -80,7 +104,7 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData }) {
       total_verse: '',
       verse_memorized: '',
       juz: '',
-      note: ''
+      note: '',
     })
     onClose()
     onSurahAdded()
@@ -112,11 +136,10 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData }) {
           boxShadow: '0px 4px 15px rgba(0, 0, 0, 0.1)',
         }}
       >
-        <h3
-          style={{ borderBottom: '1px solid #e1e4e8', paddingBottom: '10px' }}
-        >
+        <h3 style={{ borderBottom: '1px solid #e1e4e8', paddingBottom: '10px' }}>
           {isEditMode ? 'Edit Surah' : 'Add Surah'}
         </h3>
+
         {isSuccess ? (
           <div style={successContainerStyle}>
             <i style={iconStyle}>✓</i>
@@ -131,7 +154,7 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData }) {
                 <strong>Chapter Name:</strong> {formData.chapter_name}
               </div>
               <div>
-                <strong>Note:</strong> {formData.note} 
+                <strong>Note:</strong> {formData.note}
               </div>
               <div>
                 <strong>Total Verses:</strong> {formData.total_verse}
@@ -143,11 +166,7 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData }) {
                 <strong>Juz:</strong> {formData.juz}
               </div>
             </div>
-            <button
-              style={buttonStyle}
-              type='button'
-              onClick={handleSuccessClose}
-            >
+            <button style={buttonStyle} type="button" onClick={handleSuccessClose}>
               OK
             </button>
           </div>
@@ -158,17 +177,10 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData }) {
               { name: 'chapter_name', label: 'Chapter Name', type: 'text' },
               { name: 'note', label: 'Note', type: 'text' },
               { name: 'total_verse', label: 'Total Verses', type: 'number' },
-              {
-                name: 'verse_memorized',
-                label: 'Verses Memorized',
-                type: 'number',
-              },
+              { name: 'verse_memorized', label: 'Verses Memorized', type: 'number' },
               { name: 'juz', label: 'Juz', type: 'number' },
             ].map((field) => (
-              <label
-                key={field.name}
-                style={{ display: 'block', marginBottom: '15px' }}
-              >
+              <label key={field.name} style={{ display: 'block', marginBottom: '15px' }}>
                 {field.label}:{' '}
                 <input
                   type={field.type}
@@ -186,19 +198,18 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData }) {
                 />
               </label>
             ))}
+
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <button style={buttonStyle} type='submit'>
+              <button style={buttonStyle} type="submit">
                 {isEditMode ? 'Update Surah' : 'Add Surah'}
               </button>
-              <button style={buttonStyle} type='button' onClick={onClose}>
+
+              <button style={buttonStyle} type="button" onClick={onClose}>
                 Cancel
               </button>
+
               {isEditMode && (
-                <button
-                  style={deleteButtonStyle}
-                  type='button'
-                  onClick={handleDeleteSurah}
-                >
+                <button style={deleteButtonStyle} type="button" onClick={handleDeleteSurah}>
                   Delete Surah
                 </button>
               )}
@@ -218,9 +229,7 @@ const deleteButtonStyle = {
   border: 'none',
   cursor: 'pointer',
   transition: 'background-color 0.3s',
-  ':hover': {
-    backgroundColor: '#b31a28',
-  },
+  ':hover': { backgroundColor: '#b31a28' },
   marginLeft: '10px',
 }
 
@@ -232,9 +241,7 @@ const buttonStyle = {
   border: 'none',
   cursor: 'pointer',
   transition: 'background-color 0.3s',
-  ':hover': {
-    backgroundColor: '#0050a0',
-  },
+  ':hover': { backgroundColor: '#0050a0' },
 }
 
 const successContainerStyle = {

@@ -96,7 +96,7 @@ const findSectionIndexByRange = (sections, surah, begin, end) => {
 };
 
 // ---------- component ----------
-const SabaqModal = ({ isOpen, onClose }) => {
+const SabaqModal = ({ isOpen, onClose, userId }) => {
   const [formData, setFormData] = useState({
     chapter_number: '',
     chapter_name: '',
@@ -117,6 +117,11 @@ const SabaqModal = ({ isOpen, onClose }) => {
   const [errorText, setErrorText] = useState('');
   const [pageChapterRange, setPageChapterRange] = useState(null);
 
+  const withUserHeaders = (headers = {}) => ({
+    ...headers,
+    'x-user-id': String(userId),
+  });
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData(prev => ({
@@ -129,13 +134,21 @@ const SabaqModal = ({ isOpen, onClose }) => {
     }));
   };
 
-  // Load latest sabaq to rehydrate UI
+  // Load latest sabaq to rehydrate UI (✅ user-aware)
   useEffect(() => {
     if (!isOpen) return;
+    if (!userId) {
+      setErrorText('User not logged in. Please login again.');
+      return;
+    }
+
     (async () => {
       try {
-        const r = await fetch(`${HOST}/murajaah/sabaqtracker/latest`);
-        const data = await r.json();
+        const r = await fetch(`${HOST}/murajaah/sabaqtracker/latest`, {
+          headers: withUserHeaders(),
+        });
+        const data = await r.json().catch(() => null);
+
         if (r.ok && data) {
           setFormData(prev => ({
             ...prev,
@@ -148,15 +161,20 @@ const SabaqModal = ({ isOpen, onClose }) => {
             complete_memorization: !!data.complete_memorization,
             murajaah_20_times: Number.isFinite(data.murajaah_20_times) ? data.murajaah_20_times : 0,
           }));
-          // auto show verses
-          setTimeout(() => autoPopulateFromInputs(data.chapter_number, data.page, data.section, data.verse), 0);
+
+          setTimeout(() => autoPopulateFromInputs(
+            data.chapter_number,
+            data.page,
+            data.section,
+            data.verse
+          ), 0);
         }
       } catch (e) {
         // ignore
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, userId]);
 
   // auto-populate when user changes chapter/page/section
   useEffect(() => {
@@ -306,13 +324,24 @@ const SabaqModal = ({ isOpen, onClose }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorText('');
+
+    if (!userId) {
+      setErrorText('User not logged in. Please login again.');
+      return;
+    }
+
     try {
+      // ✅ include user_id in body (optional, but ok)
+      const payload = { ...formData, user_id: userId };
+
       const res = await fetch(`${HOST}/murajaah/sabaqtracker/add`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        headers: withUserHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(payload),
       });
-      const data = await res.json();
+
+      const data = await res.json().catch(() => null);
+
       if (res.ok) {
         alert('Submitted successfully!');
       } else {
@@ -361,6 +390,14 @@ const toRangeString = (min, max) =>
     <div style={modalStyles} onClick={onClose}>
       <div style={modalContentStyles} onClick={(e) => e.stopPropagation()}>
         <h2 style={{ borderBottom: '2px solid #84a59d', paddingBottom: '10px' }}>Add Sabaq Record</h2>
+
+        {(!userId) && (
+          <div style={{ marginBottom: 10, color: '#b00020', fontWeight: 700 }}>
+            User not logged in. Please login again.
+          </div>
+        )}
+
+        
 
         {/* Inputs that drive auto-population */}
         {/* Inputs that drive auto-population (stacked vertically & centered) */}
@@ -665,7 +702,7 @@ const toRangeString = (min, max) =>
     <button type="button" onClick={onClose} style={closeButtonStyles}>
       Close
     </button>
-    <button type="submit" style={submitButtonStyles}>
+    <button type="submit" style={submitButtonStyles} disabled={!userId}>
       Submit
     </button>
   </div>
