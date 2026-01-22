@@ -24,30 +24,44 @@ router.get('/', function (req, res, next) {
 
 // @desc Add New Memorized Surah
 // @route POST /murajaah/addsurah
-router.post('/addsurah', (req, res) => {
+router.post('/addsurah', async (req, res) => {
   const user_id = getUserId(req)
   if (!user_id) return res.status(400).json({ message: 'user_id is required' })
 
   const { id, chapter_name, total_verse, verse_memorized, juz, note } = req.body
 
-  const q = `
-    INSERT INTO memorized_surah
-      (id, chapter_name, total_verse, verse_memorized, juz, note, user_id)
-    VALUES
-      ($1, $2, $3, $4, $5, $6, $7)
-  `
-  pool.query(
-    q,
-    [id, chapter_name, total_verse, verse_memorized, juz, note, user_id],
-    (err) => {
-      if (err) {
-        console.error(err)
-        return res.status(500).send('Server Error')
-      }
-      res.status(201).json({ message: 'Inserted Successfully' })
+  try {
+    const q = `
+      INSERT INTO memorized_surah
+        (id, chapter_name, total_verse, verse_memorized, juz, note, user_id)
+      VALUES
+        ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (id, user_id) DO NOTHING
+    `
+
+    const result = await pool.query(q, [
+      id,
+      chapter_name,
+      total_verse,
+      verse_memorized,
+      juz,
+      note,
+      user_id,
+    ])
+
+    if (result.rowCount === 0) {
+      return res.status(409).json({
+        message: 'Surah already exists for this user',
+      })
     }
-  )
+
+    res.status(201).json({ message: 'Inserted Successfully' })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Server Error' })
+  }
 })
+
 
 // @desc Get Surah List
 // @route GET /murajaah/getmemorizedsurah?user_id=1
