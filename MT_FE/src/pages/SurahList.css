@@ -1,0 +1,926 @@
+/* ============================================
+   DESIGN TOKENS & VARIABLES
+   ============================================ */
+:root {
+  /* Typography */
+  --font-serif: 'Merriweather', 'Georgia', serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+  
+  /* Colors - Soft Elegance (Option 3) */
+  --color-bg-primary: #fdfcfb;      /* Barely off-white */
+  --color-bg-secondary: #f5f8f7;    /* Very light sage */
+  --color-bg-tertiary: #fafbfa;     /* Card background */
+  
+  --color-text-primary: #2c3e3a;    /* Soft dark with sage hint */
+  --color-text-secondary: #5a726b;  /* Muted text */
+  --color-text-muted: #7a8b84;      /* Darker muted */
+  
+  --color-accent-primary: #6fa599;  /* Softer, friendlier sage */
+  --color-accent-secondary: #3a8a7d; /* Accessible teal */
+  --color-accent-tertiary: #d73f3f; /* Slightly softer red */
+  
+  --color-success: #6fa599;         /* Sage */
+  --color-error: #d73f3f;           /* Red */
+  --color-border: #dce3e0;          /* Softer, warmer borders */
+  --color-border-light: #e5ebe8;    /* Lighter border */
+  
+  /* Spacing */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  
+  /* Sizing */
+  --size-sm: 0.875rem;
+  --size-base: 1rem;
+  --size-lg: 1.125rem;
+  --size-xl: 1.5rem;
+  --size-2xl: 2rem;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+  
+  /* Transitions */
+  --transition-fast: 120ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  
+  /* Border radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+}
+
+/* ============================================
+   RESET & BASE STYLES
+   ============================================ */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  line-height: 1.6;
+  letter-spacing: 0.3px;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  transition: all var(--transition-smooth);
+}
+
+/* ============================================
+   MAIN CONTAINER
+   ============================================ */
+.surah-list-container {
+  min-height: 100vh;
+  background: linear-gradient(
+    135deg,
+    var(--color-bg-primary) 0%,
+    var(--color-bg-secondary) 50%,
+    rgba(111, 165, 153, 0.05) 100%
+  );
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Subtle animated background grid */
+.surah-list-container::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image:
+    linear-gradient(
+      rgba(111, 165, 153, 0.04) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      rgba(111, 165, 153, 0.04) 1px,
+      transparent 1px
+    );
+  background-size: 60px 60px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ============================================
+   HEADER & TYPOGRAPHY
+   ============================================ */
+.surah-list-header {
+  position: relative;
+  z-index: 10;
+  padding: var(--space-2xl) var(--space-xl);
+  border-bottom: 1px solid var(--color-border);
+  animation: slideDown 0.6s var(--transition-smooth);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.surah-list-title {
+  font-family: var(--font-serif);
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  background: linear-gradient(
+    135deg,
+    var(--color-text-primary) 0%,
+    var(--color-accent-primary) 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1.2;
+  margin-bottom: var(--space-sm);
+}
+
+.section-subheading {
+  font-family: var(--font-serif);
+  font-size: var(--size-lg);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-md);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* ============================================
+   NAVIGATION CONTROLS
+   ============================================ */
+.nav-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-xl);
+  position: relative;
+  z-index: 10;
+  flex-wrap: wrap;
+  animation: fadeInUp 0.8s var(--transition-smooth) 0.1s backwards;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.nav-btn {
+  padding: var(--space-sm) var(--space-lg);
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  font-size: var(--size-sm);
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.nav-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(111, 165, 153, 0.25),
+    transparent
+  );
+  transition: left var(--transition-smooth);
+}
+
+.nav-btn:hover {
+  background-color: var(--color-bg-secondary);
+  border-color: var(--color-accent-primary);
+  box-shadow: 0 0 12px rgba(111, 165, 153, 0.2);
+}
+
+.nav-btn:hover::before {
+  left: 100%;
+}
+
+.nav-btn:active {
+  transform: scale(0.98);
+}
+
+.logout-btn {
+  margin-left: auto;
+  background-color: rgba(215, 63, 63, 0.12);
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.logout-btn:hover {
+  background-color: rgba(215, 63, 63, 0.2);
+  box-shadow: 0 0 12px rgba(215, 63, 63, 0.25);
+}
+
+/* ============================================
+   PROGRESS CARD
+   ============================================ */
+.progress-card {
+  margin: var(--space-xl) var(--space-xl) var(--space-2xl);
+  padding: var(--space-lg);
+  background: linear-gradient(
+    135deg,
+    var(--color-bg-tertiary) 0%,
+    rgba(139, 154, 142, 0.08) 100%
+  );
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  position: relative;
+  z-index: 10;
+  animation: fadeInUp 0.8s var(--transition-smooth) 0.15s backwards;
+  overflow: hidden;
+}
+
+.progress-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--color-accent-primary),
+    var(--color-accent-secondary)
+  );
+}
+
+.progress-label {
+  font-size: var(--size-sm);
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: var(--space-md);
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 8px;
+  background-color: var(--color-bg-secondary);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: var(--space-md);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--color-accent-primary),
+    var(--color-accent-secondary)
+  );
+  border-radius: 4px;
+  transition: width var(--transition-smooth);
+  box-shadow: 0 0 8px rgba(111, 165, 153, 0.5);
+}
+
+.progress-value {
+  font-family: var(--font-serif);
+  font-size: var(--size-xl);
+  font-weight: 700;
+  color: var(--color-accent-primary);
+  text-align: right;
+  letter-spacing: -0.5px;
+}
+
+/* ============================================
+   WEEKLY PROGRESS TABLE
+   ============================================ */
+.weekly-progress-wrapper {
+  margin: var(--space-2xl) var(--space-xl);
+  padding: var(--space-lg);
+  background: linear-gradient(
+    135deg,
+    var(--color-bg-tertiary) 0%,
+    rgba(139, 154, 142, 0.08) 100%
+  );
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  position: relative;
+  z-index: 10;
+  animation: fadeInUp 0.8s var(--transition-smooth) 0.2s backwards;
+  overflow-x: auto;
+}
+
+.weekly-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--size-sm);
+}
+
+.weekly-table thead th {
+  padding: var(--space-lg) var(--space-md);
+  background-color: rgba(111, 165, 153, 0.1);
+  border-bottom: 2px solid var(--color-accent-primary);
+  text-align: center;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.table-day {
+  font-size: var(--size-sm);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.table-date {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  margin-top: var(--space-xs);
+  font-weight: 400;
+}
+
+.weekly-table tbody td {
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+  text-align: center;
+  transition: background-color var(--transition-fast);
+}
+
+.weekly-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.weekly-table tbody tr:hover td {
+  background-color: rgba(111, 165, 153, 0.06);
+}
+
+.table-progress-value {
+  font-family: var(--font-serif);
+  font-size: var(--size-lg);
+  font-weight: 700;
+  color: var(--color-accent-primary);
+  letter-spacing: -0.3px;
+}
+
+/* ============================================
+   ADD SURAH BUTTON
+   ============================================ */
+.add-surah-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: var(--space-xl);
+  padding: var(--space-md) var(--space-xl);
+  background: linear-gradient(
+    135deg,
+    var(--color-accent-primary) 0%,
+    var(--color-accent-secondary) 100%
+  );
+  color: white;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: var(--size-base);
+  letter-spacing: 0.4px;
+  position: relative;
+  z-index: 10;
+  box-shadow: 0 4px 16px rgba(111, 165, 153, 0.35);
+  animation: fadeInUp 0.8s var(--transition-smooth) 0.25s backwards;
+  overflow: hidden;
+}
+
+.add-icon {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.add-surah-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.2);
+  transition: left var(--transition-smooth);
+  border-radius: var(--radius-md);
+}
+
+.add-surah-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(111, 165, 153, 0.45);
+}
+
+.add-surah-btn:hover::before {
+  left: 100%;
+}
+
+.add-surah-btn:active {
+  transform: translateY(0);
+}
+
+/* ============================================
+   SURAHS CONTAINER & JUZ SECTIONS
+   ============================================ */
+.surahs-container {
+  position: relative;
+  z-index: 10;
+  padding: var(--space-xl);
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.juz-section {
+  margin-bottom: var(--space-2xl);
+  animation: fadeInUp 0.8s var(--transition-smooth) 0.3s backwards;
+}
+
+.juz-heading {
+  font-family: var(--font-serif);
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-lg);
+  padding-bottom: var(--space-md);
+  border-bottom: 2px solid var(--color-accent-primary);
+  letter-spacing: -0.3px;
+  position: relative;
+  display: inline-block;
+}
+
+.juz-heading::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 60%;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--color-accent-primary),
+    transparent
+  );
+  animation: expandWidth 0.8s var(--transition-smooth);
+}
+
+@keyframes expandWidth {
+  from {
+    width: 0;
+  }
+  to {
+    width: 60%;
+  }
+}
+
+.surahs-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* ============================================
+   SURAH CARDS
+   ============================================ */
+.surah-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-lg);
+  background: linear-gradient(
+    135deg,
+    var(--color-bg-tertiary) 0%,
+    rgba(212, 165, 116, 0.04) 100%
+  );
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-smooth);
+  position: relative;
+  overflow: hidden;
+  animation: fadeInUp 0.6s var(--transition-smooth) backwards;
+}
+
+.surah-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    var(--color-accent-primary),
+    var(--color-accent-secondary)
+  );
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: transform var(--transition-smooth);
+}
+
+.surah-card:hover {
+  background: linear-gradient(
+    135deg,
+    var(--color-bg-secondary) 0%,
+    rgba(111, 165, 153, 0.08) 100%
+  );
+  border-color: var(--color-accent-primary);
+  box-shadow: 0 8px 24px rgba(111, 165, 153, 0.18);
+  transform: translateX(4px);
+}
+
+.surah-card:hover::before {
+  transform: scaleY(1);
+}
+
+.surah-content {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: var(--space-lg);
+}
+
+.surah-number {
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-accent-primary);
+  min-width: 50px;
+  text-align: center;
+  letter-spacing: -0.3px;
+}
+
+.surah-details {
+  flex: 1;
+}
+
+.surah-name {
+  font-family: var(--font-serif);
+  font-size: var(--size-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-xs);
+  letter-spacing: -0.2px;
+}
+
+.surah-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--size-sm);
+  color: var(--color-text-secondary);
+}
+
+/* ============================================
+   PARENT & SUBSECTION STYLES
+   ============================================ */
+.surah-card--parent {
+  border-left: 4px solid var(--color-accent-primary);
+  padding-right: var(--space-md);
+}
+
+.surah-card--parent:hover {
+  background: linear-gradient(
+    135deg,
+    var(--color-bg-secondary) 0%,
+    rgba(111, 165, 153, 0.12) 100%
+  );
+}
+
+.expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background-color: rgba(111, 165, 153, 0.1);
+  border: 1px solid var(--color-accent-primary);
+  border-radius: 6px;
+  color: var(--color-accent-primary);
+  margin-right: var(--space-md);
+  flex-shrink: 0;
+  transition: all var(--transition-smooth);
+}
+
+.expand-btn:hover {
+  background-color: rgba(111, 165, 153, 0.2);
+  transform: scale(1.05);
+}
+
+.expand-btn svg {
+  width: 18px;
+  height: 18px;
+  transition: transform var(--transition-smooth);
+}
+
+.expand-btn--open svg {
+  transform: rotate(180deg);
+}
+
+.subsection-status {
+  color: var(--color-accent-primary);
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.subsections-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+  padding-left: var(--space-lg);
+  border-left: 2px dashed var(--color-border-light);
+  animation: slideDown 0.3s var(--transition-smooth);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.surah-card--subsection {
+  margin-left: var(--space-lg);
+  border-left: 3px solid var(--color-accent-secondary);
+  background: linear-gradient(
+    135deg,
+    rgba(58, 138, 125, 0.04) 0%,
+    rgba(212, 165, 116, 0.02) 100%
+  );
+}
+
+.surah-card--subsection:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(58, 138, 125, 0.08) 0%,
+    rgba(111, 165, 153, 0.06) 100%
+  );
+}
+
+.subsection-number {
+  font-size: 1.25rem;
+  color: var(--color-accent-secondary);
+  font-weight: 700;
+}
+
+.meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.meta-label {
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.meta-divider {
+  color: var(--color-border);
+  opacity: 0.5;
+}
+
+.murajaah-count {
+  background-color: transparent;
+  color: var(--color-accent-secondary);
+  font-weight: 600;
+}
+
+.murajaah-count-behind {
+  background-color: rgba(111, 165, 153, 0.25);
+  color: var(--color-accent-primary);
+  font-weight: 600;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: 3px;
+}
+
+/* ============================================
+   CHECK BUTTON
+   ============================================ */
+.check-btn {
+  padding: var(--space-sm) var(--space-md);
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  border: 1.5px solid var(--color-accent-secondary);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: var(--size-sm);
+  letter-spacing: 0.3px;
+  min-width: 80px;
+  position: relative;
+  overflow: hidden;
+  transition: all var(--transition-smooth);
+  flex-shrink: 0;
+}
+
+.check-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(111, 165, 153, 0.25);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: width var(--transition-smooth), height var(--transition-smooth);
+}
+
+.check-btn:not(:disabled):hover {
+  background-color: rgba(111, 165, 153, 0.12);
+  border-color: var(--color-accent-primary);
+  box-shadow: 0 0 12px rgba(111, 165, 153, 0.25);
+}
+
+.check-btn:not(:disabled):hover::before {
+  width: 200px;
+  height: 200px;
+}
+
+.check-btn:not(:disabled):active {
+  transform: scale(0.96);
+}
+
+.check-btn.checked {
+  background: linear-gradient(
+    135deg,
+    var(--color-accent-primary) 0%,
+    var(--color-accent-secondary) 100%
+  );
+  color: white;
+  border-color: var(--color-accent-secondary);
+  cursor: not-allowed;
+  box-shadow: 0 4px 12px rgba(111, 165, 153, 0.35);
+}
+
+.check-btn.checked:hover {
+  box-shadow: 0 4px 12px rgba(111, 165, 153, 0.35);
+  transform: none;
+}
+
+.check-icon {
+  width: 1.2rem;
+  height: 1.2rem;
+  stroke-width: 3;
+  display: inline;
+}
+
+/* ============================================
+   ACCESSIBILITY & REDUCED MOTION
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================
+   RESPONSIVE DESIGN
+   ============================================ */
+@media (max-width: 768px) {
+  .surah-list-title {
+    font-size: 1.75rem;
+  }
+
+  .nav-controls {
+    padding: var(--space-lg);
+    gap: var(--space-sm);
+  }
+
+  .logout-btn {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .surah-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .surah-content {
+    width: 100%;
+    margin-bottom: var(--space-md);
+  }
+
+  .check-btn {
+    width: 100%;
+  }
+
+  .progress-card,
+  .weekly-progress-wrapper {
+    margin: var(--space-lg);
+    padding: var(--space-md);
+  }
+
+  .surah-list-header {
+    padding: var(--space-lg);
+  }
+
+  .juz-heading {
+    font-size: 1.25rem;
+  }
+
+  .weekly-table {
+    font-size: 0.75rem;
+  }
+
+  .weekly-table thead th,
+  .weekly-table tbody td {
+    padding: var(--space-sm);
+  }
+}
+
+@media (max-width: 480px) {
+  .surah-list-title {
+    font-size: 1.5rem;
+  }
+
+  .add-surah-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .surahs-container {
+    padding: var(--space-md);
+  }
+
+  .juz-heading {
+    font-size: 1.125rem;
+  }
+
+  .surah-name {
+    font-size: var(--size-base);
+  }
+
+  .surah-meta {
+    font-size: 0.75rem;
+  }
+}
+
+/* ============================================
+   FOCUS STATES & KEYBOARD NAVIGATION
+   ============================================ */
+button:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 2px;
+}
+
+.surah-card:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 2px;
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+@media print {
+  .nav-controls,
+  .add-surah-btn {
+    display: none;
+  }
+
+  .surah-list-container {
+    background: white;
+    color: black;
+  }
+}

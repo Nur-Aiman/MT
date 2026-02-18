@@ -209,23 +209,27 @@ const TahajjudModal = ({ isOpen, onClose }) => {
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      backgroundColor: 'rgba(0, 0, 0, 0.6)',
+      zIndex: 1000,
     }}
     onClick={onClose}
   >
     <div
       style={{
-        backgroundColor: 'white',
-        padding: '20px',
-        borderRadius: '5px',
-        maxWidth: '500px',
+        backgroundColor: '#fafbfc',
+        padding: '28px',
+        borderRadius: '14px',
+        maxWidth: '540px',
         width: '90%',
+        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
+        zIndex: 1001,
+        fontFamily: 'Merriweather, serif',
       }}
       onClick={e => e.stopPropagation()}
     >
-        <h2>Tahajjud Tracker</h2>
-        <p>Highest Streak: {tahajjudData.highestStreak}</p>
-        <p>Current Streak: {tahajjudData.currentStreak}</p>
+        <h2 style={{ color: '#3a8a7d', fontFamily: 'Merriweather, serif', fontSize: '24px', fontWeight: 600, marginTop: 0, borderBottom: '2px solid #6fa599', paddingBottom: '14px', marginBottom: '20px' }}>Tahajjud Tracker</h2>
+        <p style={{ fontFamily: 'Merriweather, serif', color: '#2d5a55', marginBottom: '12px' }}><strong>Highest Streak:</strong> {tahajjudData.highestStreak}</p>
+        <p style={{ fontFamily: 'Merriweather, serif', color: '#2d5a55', marginBottom: '12px' }}><strong>Current Streak:</strong> {tahajjudData.currentStreak}</p>
         {/* <p>Total in Month {currentMonth}: {tahajjudData.totalInCurrentMonth}</p>
         <p>Total in {currentYear}: {tahajjudData.totalInCurrentYear}</p> */}
         <div style={{
@@ -238,21 +242,21 @@ const TahajjudModal = ({ isOpen, onClose }) => {
     Tahajjud completion status for {formattedDate} ({dayOfWeek}):
   </p>
   <button
-          onClick={!isCompleted ? handleTahajjudCompletion : undefined} // Only set onClick if not completed
+          onClick={!isCompleted ? handleTahajjudCompletion : undefined}
           style={{
-            marginTop: '20px',
-            padding: '10px',
-            backgroundColor: isCompleted ? 'grey' : '#ffd700', // Change color based on completion
+            marginTop: '10px',
+            padding: '11px 16px',
+            backgroundColor: isCompleted ? '#a8a8a8' : '#6fa599',
             border: 'none',
-            color: 'black',
-            borderRadius: '5px',
-            fontSize: '1rem',
-            display: 'block',
-            width: '30%',
-            boxSizing: 'border-box',
-            cursor: isCompleted ? 'default' : 'pointer', // Change cursor based on completion
+            color: '#fff',
+            borderRadius: '6px',
+            fontSize: '14px',
+            fontWeight: 600,
+            fontFamily: 'Merriweather, serif',
+            cursor: isCompleted ? 'default' : 'pointer',
+            transition: 'background-color 0.3s',
           }}
-          disabled={isCompleted} // Disable button based on completion
+          disabled={isCompleted}
         >
           {isCompleted ? 'Completed' : 'Complete'}
         </button>
@@ -269,11 +273,15 @@ const TahajjudModal = ({ isOpen, onClose }) => {
   <button
     onClick={handlePrevWeek}
     style={{
-      padding: '10px',
-      backgroundColor: '#84a59d',
+      padding: '11px 16px',
+      backgroundColor: '#6fa599',
       border: 'none',
       color: 'white',
-      borderRadius: '5px',
+      borderRadius: '6px',
+      fontWeight: 600,
+      fontFamily: 'Merriweather, serif',
+      cursor: 'pointer',
+      transition: 'background-color 0.3s',
     }}
   >
     Prev Week
@@ -281,11 +289,16 @@ const TahajjudModal = ({ isOpen, onClose }) => {
   <button
     onClick={handleNextWeek}
     style={{
-      padding: '10px',
-      backgroundColor: '#84a59d',
+      padding: '11px 16px',
+      backgroundColor: '#6fa599',
       border: 'none',
       color: 'white',
-      borderRadius: '5px',
+      borderRadius: '6px',
+      fontWeight: 600,
+      fontFamily: 'Merriweather, serif',
+      cursor: weekOffset === 0 ? 'not-allowed' : 'pointer',
+      transition: 'background-color 0.3s',
+      opacity: weekOffset === 0 ? 0.6 : 1,
     }}
     disabled={weekOffset === 0}
   >
@@ -295,15 +308,15 @@ const TahajjudModal = ({ isOpen, onClose }) => {
 
 
         {/* Tahajjud history records */}
-        <div className="tahajjud-history">
-  <h3>Week of {formatDate(currentWeekRange.start)} to {formatDate(currentWeekRange.end)}</h3>
+        <div className="tahajjud-history" style={{ marginTop: '20px' }}>
+  <h3 style={{ color: '#3a8a7d', fontFamily: 'Merriweather, serif', fontSize: '18px', fontWeight: 600, marginBottom: '16px', borderBottom: '1px solid #d0d4d9', paddingBottom: '10px' }}>Week of {formatDate(currentWeekRange.start)} to {formatDate(currentWeekRange.end)}</h3>
   {weekDays.map((day, index) => (
-    <div key={index} className="day-record" style={{ marginBottom: '10px' }}>
-      <span>{formatDate(day)}: </span>
+    <div key={index} className="day-record" style={{ marginBottom: '12px', padding: '10px 12px', backgroundColor: '#f8fbfa', borderRadius: '6px', borderLeft: checkRecordedTahajjud(day) ? '3px solid #6fa599' : '3px solid #d0d4d9' }}>
+      <span style={{ fontFamily: 'Merriweather, serif', color: '#2d5a55', fontWeight: 500 }}>{formatDate(day)}: </span>
       {checkRecordedTahajjud(day) ? (
-        <span style={{ color: 'green' }}>✓</span>
+        <span style={{ color: '#6fa599', fontWeight: 700, marginLeft: '8px' }}>✓ Completed</span>
       ) : (
-        <span>No Tahajjud recorded</span>
+        <span style={{ color: '#888', fontSize: '13px', marginLeft: '8px' }}>No record</span>
       )}
     </div>
   ))}

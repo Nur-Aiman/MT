@@ -28,19 +28,53 @@ router.post('/addsurah', async (req, res) => {
   const user_id = getUserId(req)
   if (!user_id) return res.status(400).json({ message: 'user_id is required' })
 
-  const { id, chapter_name, total_verse, verse_memorized, juz, note } = req.body
+  const { id, parent_id, chapter_name, total_verse, verse_memorized, juz, note } = req.body
 
   try {
-    const q = `
+    // Convert id and parent_id to numeric for proper decimal support
+    const numericId = parseFloat(id)
+    const numericParentId = parent_id ? parseFloat(parent_id) : null
+
+    // Check if surah with this exact ID already exists for THIS user ONLY
+    const checkQuery = `
+      SELECT pk_id, id, user_id 
+      FROM memorized_surah
+      WHERE id::numeric = $1::numeric 
+        AND user_id = $2
+      LIMIT 1
+    `
+    
+    const checkResult = await pool.query(checkQuery, [numericId, user_id])
+
+    if (checkResult.rows.length > 0) {
+      // Already exists for this user - return 409 conflict
+      return res.status(409).json({ 
+        message: 'Surah already exists for this user',
+        surah: checkResult.rows[0]
+      })
+    }
+
+    // Reset sequence to ensure pk_id doesn't duplicate
+    await pool.query(`
+      SELECT setval(
+        'memorized_surah_pk_id_seq',
+        COALESCE((SELECT MAX(pk_id) FROM memorized_surah), 0) + 1,
+        false
+      )
+    `)
+
+    // Insert new surah only if check passed
+    const insertQuery = `
       INSERT INTO memorized_surah
-        (id, chapter_name, total_verse, verse_memorized, juz, note, user_id)
+        (id, parent_id, chapter_name, total_verse, verse_memorized, juz, note, user_id)
       VALUES
-        ($1, $2, $3, $4, $5, $6, $7)
-      ON CONFLICT (id, user_id) DO NOTHING
+        ($1::numeric, $2::numeric, $3, $4, $5, $6, $7, $8)
+      RETURNING pk_id, id, user_id
     `
 
-    const result = await pool.query(q, [
-      id,
+    const insertResult = await pool.query(insertQuery, [
+      numericId,
+      numericParentId,
       chapter_name,
       total_verse,
       verse_memorized,
@@ -48,16 +82,20 @@ router.post('/addsurah', async (req, res) => {
       note,
       user_id,
     ])
-
-    if (result.rowCount === 0) {
-      return res.status(409).json({
-        message: 'Surah already exists for this user',
-      })
-    }
-
-    res.status(201).json({ message: 'Inserted Successfully' })
+    
+    res.status(201).json({ 
+      message: 'Inserted Successfully',
+      surah: insertResult.rows[0]
+    })
   } catch (err) {
-    console.error(err)
+    console.error('Error in /addsurah:', err)
+    
+    // Handle specific constraint violations
+    if (err.code === '23505') {
+      // Unique constraint violation - record likely already exists
+      return res.status(409).json({ message: 'Surah already exists for this user' })
+    }
+    
     res.status(500).json({ message: 'Server Error' })
   }
 })
@@ -70,17 +108,33 @@ router.get('/getmemorizedsurah', (req, res) => {
   if (!user_id) return res.status(400).json({ message: 'user_id is required' })
 
   const q = `
-    SELECT *
+    SELECT 
+      id::text,
+      parent_id::text,
+      chapter_name,
+      total_verse,
+      verse_memorized,
+      juz,
+      note,
+      murajaah_counter,
+      user_id,
+      pk_id
     FROM memorized_surah
     WHERE user_id = $1
-    ORDER BY juz ASC, id ASC
+    ORDER BY juz ASC, parent_id ASC NULLS FIRST, id ASC
   `
   pool.query(q, [user_id], (err, result) => {
     if (err) {
       console.error(err)
       return res.status(500).send('Server Error')
     }
-    res.status(200).json(result.rows)
+    // Convert string IDs back to numbers for JSON serialization
+    const rows = result.rows.map(row => ({
+      ...row,
+      id: parseFloat(row.id),
+      parent_id: row.parent_id ? parseFloat(row.parent_id) : null
+    }))
+    res.status(200).json(rows)
   })
 })
 
@@ -107,10 +161,10 @@ router.post('/addmurajaah', async (req, res) => {
     const date_time = moment.tz('Asia/Kuala_Lumpur').format()
     const currentDate = moment.tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD')
 
-    // update counter (only this user)
+    // update counter (only this user) - cast surah_id to numeric for proper decimal support
     const upd = await pool.query(
-  'UPDATE memorized_surah SET murajaah_counter = murajaah_counter + 1 WHERE id = $1 AND user_id = $2',
-  [surah_id, user_id]
+  'UPDATE memorized_surah SET murajaah_counter = murajaah_counter + 1 WHERE id = $1::numeric AND user_id = $2',
+  [parseFloat(surah_id), user_id]
 )
 if (upd.rowCount === 0) {
   return res.status(404).json({ message: 'Surah not found for this user.' })
@@ -124,8 +178,17 @@ if (upd.rowCount === 0) {
     )
 
     const insertNewLog = async () => {
-      const surahIds = [surah_id]
+      const surahIds = [parseFloat(surah_id)]
       const completion_rate = (surahIds.length / total_memorized) * 100
+
+      // Reset sequence to ensure ID doesn't duplicate
+      await pool.query(`
+        SELECT setval(
+          'murajaah_log_id_seq',
+          COALESCE((SELECT MAX(id) FROM murajaah_log), 0) + 1,
+          false
+        )
+      `)
 
       await pool.query(
         'INSERT INTO murajaah_log (surah_id, date_time, completion_rate, user_id) VALUES ($1, $2, $3, $4)',
@@ -141,9 +204,9 @@ if (upd.rowCount === 0) {
 
     if (logDate !== currentDate) return insertNewLog()
 
-    // avoid duplicates
-    const merged = [...(latestLog.surah_id || []), surah_id]
-    const unique = Array.from(new Set(merged.map(String))).map(Number)
+    // avoid duplicates - convert to numeric for proper comparison
+    const merged = [...(latestLog.surah_id || []), parseFloat(surah_id)]
+    const unique = Array.from(new Set(merged.map(id => parseFloat(id))))
 
     const completion_rate = (unique.length / total_memorized) * 100
 
@@ -167,12 +230,12 @@ router.put('/updatesurah/:id', (req, res) => {
   if (!user_id) return res.status(400).json({ message: 'user_id is required' })
 
   const { chapter_name, total_verse, verse_memorized, juz, note } = req.body
-  const surahId = req.params.id
+  const surahId = parseFloat(req.params.id)
 
   const updateQuery = `
     UPDATE memorized_surah
     SET chapter_name = $1, total_verse = $2, verse_memorized = $3, juz = $4, note = $5
-    WHERE id = $6 AND user_id = $7
+    WHERE id = $6::numeric AND user_id = $7
   `
 
   pool.query(
@@ -194,8 +257,8 @@ router.delete('/deletesurah/:id', (req, res) => {
   const user_id = getUserId(req)
   if (!user_id) return res.status(400).json({ message: 'user_id is required' })
 
-  const surahId = req.params.id
-  const deleteQuery = 'DELETE FROM memorized_surah WHERE id = $1 AND user_id = $2'
+  const surahId = parseFloat(req.params.id)
+  const deleteQuery = 'DELETE FROM memorized_surah WHERE id = $1::numeric AND user_id = $2'
 
   pool.query(deleteQuery, [surahId, user_id], (err, result) => {
     if (err) {
@@ -302,15 +365,17 @@ router.post('/sabaqtracker/add', (req, res) => {
   } = req.body
 
   const currentDate = moment.tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD')
+  // Convert chapter_number to numeric for decimal support (e.g., 2.0, 2.1)
+  const numericChapterNumber = parseFloat(chapter_number)
 
   // include user_id in matching condition
   pool.query(
     `SELECT * FROM sabaq_tracker
      WHERE user_id = $1 AND date = $2
-       AND chapter_number = $3 AND chapter_name = $4
+       AND chapter_number = $3::numeric AND chapter_name = $4
        AND page = $5 AND section = $6 AND verse = $7`,
-    [user_id, currentDate, chapter_number, chapter_name, page, section, verse],
-    (err, result) => {
+    [user_id, currentDate, numericChapterNumber, chapter_name, page, section, verse],
+    async (err, result) => {
       if (err) {
         console.error(err)
         return res.status(500).json({ message: 'Server Error' })
@@ -329,13 +394,22 @@ router.post('/sabaqtracker/add', (req, res) => {
           }
         )
       } else {
+        // Reset sequence to ensure ID doesn't duplicate
+        await pool.query(`
+          SELECT setval(
+            'sabaq_tracker_id_seq',
+            COALESCE((SELECT MAX(id) FROM sabaq_tracker), 0) + 1,
+            false
+          )
+        `)
+
         pool.query(
           `INSERT INTO sabaq_tracker
             (date, chapter_number, chapter_name, page, section, verse, number_of_readings, complete_memorization, murajaah_20_times, user_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+           VALUES ($1, $2::numeric, $3, $4, $5, $6, $7, $8, $9, $10)`,
           [
             currentDate,
-            chapter_number,
+            numericChapterNumber,
             chapter_name,
             page,
             section,
@@ -454,6 +528,15 @@ router.post('/tahajjud/record', async (req, res) => {
         )
       }
     } else {
+      // Reset sequence to ensure ID doesn't duplicate
+      await pool.query(`
+        SELECT setval(
+          'tahajjud_tracker_id_seq',
+          COALESCE((SELECT MAX(id) FROM tahajjud_tracker), 0) + 1,
+          false
+        )
+      `)
+
       await pool.query(
         'INSERT INTO tahajjud_tracker (dates, streak_count, user_id) VALUES ($1, $2, $3)',
         [[currentDate], 1, user_id]

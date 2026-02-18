@@ -152,7 +152,7 @@ const SabaqModal = ({ isOpen, onClose, userId }) => {
         if (r.ok && data) {
           setFormData(prev => ({
             ...prev,
-            chapter_number: data.chapter_number ?? '',
+            chapter_number: data.chapter_number ? Math.floor(data.chapter_number) : '',
             chapter_name: data.chapter_name ?? '',
             page: data.page ?? '',
             section: data.section ?? '',
@@ -249,7 +249,7 @@ const SabaqModal = ({ isOpen, onClose, userId }) => {
     const sectionStr = selected.join(',');
     setFormData(prev => ({
       ...prev,
-      chapter_number: String(chapterNum),
+      chapter_number: Math.floor(chapterNum),
       chapter_name: chapterName || prev.chapter_name,
       page: String(pageNum),
       section: sectionStr,
@@ -343,12 +343,12 @@ const SabaqModal = ({ isOpen, onClose, userId }) => {
       const data = await res.json().catch(() => null);
 
       if (res.ok) {
-        alert('Submitted successfully!');
+        alert('Saved successfully!');
       } else {
-        alert(data?.message || 'Error submitting');
+        alert(data?.message || 'Error saving');
       }
     } catch (err) {
-      setErrorText('Network error while submitting.');
+      setErrorText('Network error while saving.');
     }
   };
 
@@ -406,11 +406,14 @@ const toRangeString = (min, max) =>
     <div>
       <label style={labelStyles}>Chapter Number</label>
       <input
+        type="number"
         name="chapter_number"
         value={formData.chapter_number || ''}
         onChange={handleChange}
+        min="1"
+        max="114"
         style={inputStyles}
-        placeholder="e.g. 2"
+        placeholder="e.g. 2 (parent chapter only)"
       />
     </div>
 
@@ -703,7 +706,7 @@ const toRangeString = (min, max) =>
       Close
     </button>
     <button type="submit" style={submitButtonStyles} disabled={!userId}>
-      Submit
+      Save
     </button>
   </div>
 </form>

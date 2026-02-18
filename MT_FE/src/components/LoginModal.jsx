@@ -57,24 +57,29 @@ function LoginModal({ isOpen, onClose }) {
         justifyContent: 'center',
         alignItems: 'center',
         transition: 'opacity 0.3s',
+        zIndex: 1000,
       }}
+      onClick={onClose}
     >
       <div
         style={{
-          backgroundColor: '#f7f8fa',
-          padding: '20px',
-          borderRadius: '12px',
-          width: '80%',
-          maxWidth: '400px',
-          boxShadow: '0px 4px 15px rgba(0, 0, 0, 0.1)',
+          backgroundColor: '#fafbfc',
+          padding: '28px',
+          borderRadius: '14px',
+          width: '90%',
+          maxWidth: '420px',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
+          zIndex: 1001,
+          fontFamily: 'Merriweather, serif',
         }}
+        onClick={(e) => e.stopPropagation()}
       >
-        <h3 style={{ borderBottom: '1px solid #e1e4e8', paddingBottom: '10px' }}>
+        <h3 style={{ borderBottom: '2px solid #6fa599', paddingBottom: '12px', marginBottom: '20px', color: '#3a8a7d', fontFamily: 'Merriweather, serif', fontSize: '22px', fontWeight: 600 }}>
           {isLoginMode ? 'Login' : 'Register'}
         </h3>
         <form onSubmit={handleSubmit}>
-          <label style={{ display: 'block', marginBottom: '15px' }}>
-            Email:
+          <label style={{ display: 'block', marginBottom: '16px' }}>
+            <span style={{ fontWeight: 600, color: '#2d5a55', display: 'block', marginBottom: '6px', fontFamily: 'Merriweather, serif' }}>Email</span>
             <input
               type="text"
               name="email"
@@ -82,16 +87,21 @@ function LoginModal({ isOpen, onClose }) {
               onChange={handleInputChange}
               required
               style={{
-                width: '95%',
-                padding: '10px',
-                borderRadius: '4px',
-                border: '1px solid #e1e4e8',
-                marginTop: '5px',
+                width: '100%',
+                padding: '11px 12px',
+                borderRadius: '6px',
+                border: '1px solid #d0d4d9',
+                boxSizing: 'border-box',
+                fontFamily: 'inherit',
+                fontSize: '14px',
+                transition: 'border-color 0.2s',
               }}
+              onFocus={(e) => e.target.style.borderColor = '#6fa599'}
+              onBlur={(e) => e.target.style.borderColor = '#d0d4d9'}
             />
           </label>
-          <label style={{ display: 'block', marginBottom: '15px' }}>
-            Password:
+          <label style={{ display: 'block', marginBottom: '16px' }}>
+            <span style={{ fontWeight: 600, color: '#2d5a55', display: 'block', marginBottom: '6px', fontFamily: 'Merriweather, serif' }}>Password</span>
             <input
               type="password"
               name="password"
@@ -99,12 +109,17 @@ function LoginModal({ isOpen, onClose }) {
               onChange={handleInputChange}
               required
               style={{
-                width: '95%',
-                padding: '10px',
-                borderRadius: '4px',
-                border: '1px solid #e1e4e8',
-                marginTop: '5px',
+                width: '100%',
+                padding: '11px 12px',
+                borderRadius: '6px',
+                border: '1px solid #d0d4d9',
+                boxSizing: 'border-box',
+                fontFamily: 'inherit',
+                fontSize: '14px',
+                transition: 'border-color 0.2s',
               }}
+              onFocus={(e) => e.target.style.borderColor = '#6fa599'}
+              onBlur={(e) => e.target.style.borderColor = '#d0d4d9'}
             />
           </label>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -112,11 +127,14 @@ function LoginModal({ isOpen, onClose }) {
               type="button"
               onClick={() => setIsLoginMode(!isLoginMode)}
               style={{
-                padding: '10px',
+                padding: '10px 14px',
                 border: 'none',
                 backgroundColor: 'transparent',
-                color: '#0366d6',
+                color: '#3a8a7d',
                 cursor: 'pointer',
+                fontWeight: 600,
+                fontFamily: 'Merriweather, serif',
+                fontSize: '14px',
               }}
             >
               {isLoginMode ? 'New User?' : 'Existing User?'}
@@ -126,14 +144,16 @@ function LoginModal({ isOpen, onClose }) {
                 type="button"
                 onClick={onClose}
                 style={{
-                  padding: '10px 15px',
+                  padding: '11px 18px',
                   marginRight: '10px',
-                  backgroundColor: '#d73a49',
+                  backgroundColor: '#6fa599',
                   color: '#fff',
-                  borderRadius: '4px',
+                  borderRadius: '6px',
                   border: 'none',
                   cursor: 'pointer',
                   transition: 'background-color 0.3s',
+                  fontWeight: 600,
+                  fontFamily: 'Merriweather, serif',
                 }}
               >
                 Cancel
@@ -141,13 +161,15 @@ function LoginModal({ isOpen, onClose }) {
               <button
                 type="submit"
                 style={{
-                  padding: '10px 15px',
-                  backgroundColor: '#0366d6',
+                  padding: '11px 18px',
+                  backgroundColor: '#3a8a7d',
                   color: '#fff',
-                  borderRadius: '4px',
+                  borderRadius: '6px',
                   border: 'none',
                   cursor: 'pointer',
                   transition: 'background-color 0.3s',
+                  fontWeight: 600,
+                  fontFamily: 'Merriweather, serif',
                 }}
               >
                 {isLoginMode ? 'Login' : 'Register'}
