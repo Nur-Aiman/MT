@@ -13,6 +13,9 @@ function TilawahModal({ isOpen, onClose, userId }) {
   const [message, setMessage] = useState('')
   const [pagesCompletedToday, setPagesCompletedToday] = useState(0)
   const [calculatedMetrics, setCalculatedMetrics] = useState(null)
+  const [targetPageToday, setTargetPageToday] = useState(null)
+  const [startPageToday, setStartPageToday] = useState(null)
+
 
   const withUserHeaders = (headers = {}) => ({
     ...headers,
@@ -20,12 +23,15 @@ function TilawahModal({ isOpen, onClose, userId }) {
   })
 
   useEffect(() => {
-    if (isOpen && userId) {
-      fetchStatus()
-      fetchProgress()
-      fetchLogs()
-    }
-  }, [isOpen, userId])
+  if (isOpen && userId) {
+    ;(async () => {
+      await fetchStatus()
+      await fetchProgress()
+      await fetchLogs()
+    })()
+  }
+}, [isOpen, userId])
+
 
   const fetchStatus = async () => {
     try {
@@ -84,21 +90,34 @@ function TilawahModal({ isOpen, onClose, userId }) {
       const data = await res.json()
       setLogs(Array.isArray(data) ? data : [])
       
-      // Calculate pages completed today
-      const today = moment.tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD')
-      const todaysLogs = Array.isArray(data) ? data.filter(log => 
+      // Calculate pages completed today + today's target page
+const today = moment.tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD')
+const todaysLogs = Array.isArray(data)
+  ? data.filter(
+      (log) =>
         moment(log.update_time).tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD') === today
-      ) : []
-      
-      if (todaysLogs.length > 0) {
-        const minPage = Math.min(...todaysLogs.map(log => log.page_number))
-        const maxPage = Math.max(...todaysLogs.map(log => log.page_number))
-        const completed = Math.max(0, maxPage - minPage)
-        console.log('minpage', minPage, 'maxpage', maxPage, 'completed today', completed)
-        setPagesCompletedToday(completed)
-      } else {
-        setPagesCompletedToday(0)
-      }
+    )
+  : []
+
+const dailyTarget = progress?.daily_target || 20  // uses your progress target, fallback 20
+
+if (todaysLogs.length > 0) {
+  const minPage = Math.min(...todaysLogs.map((log) => log.page_number))
+  const maxPage = Math.max(...todaysLogs.map((log) => log.page_number))
+
+  const completed = Math.max(0, maxPage - minPage)
+  setPagesCompletedToday(completed)
+
+  setStartPageToday(minPage)
+  setTargetPageToday(Math.min(604, minPage + dailyTarget))
+} else {
+  setPagesCompletedToday(0)
+
+  // fallback: start from current status page (or 1)
+  const fallbackStart = status?.last_page_recited ?? 1
+  setStartPageToday(fallbackStart)
+  setTargetPageToday(Math.min(604, fallbackStart + dailyTarget))
+}
     } catch (error) {
       console.error('Error fetching logs:', error)
     }
@@ -272,6 +291,12 @@ function TilawahModal({ isOpen, onClose, userId }) {
                   <div className="info-label">Daily Target</div>
                   <div className="info-value">{progress.daily_target} pages</div>
                 </div>
+                  <div className="info-card">
+            <div className="info-label">Target Page Today</div>
+    <div className="info-value">
+      {startPageToday && targetPageToday ? `${startPageToday} → ${targetPageToday}` : '-'}
+    </div>
+  </div>
                 <div className="info-card">
                   <div className="info-label">Pages Completed Today</div>
                   <div className="info-value">{pagesCompletedToday} pages</div>
