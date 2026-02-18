@@ -402,26 +402,27 @@ button {
   align-items: center;
   gap: var(--space-sm);
   margin: var(--space-xl);
-  padding: var(--space-md) var(--space-xl);
+  padding: 8px 16px; 
   background: linear-gradient(
     135deg,
     var(--color-accent-primary) 0%,
     var(--color-accent-secondary) 100%
   );
   color: white;
-  border-radius: var(--radius-md);
+  border-radius: 10px;  
   font-weight: 600;
-  font-size: var(--size-base);
+  font-size: 0.9rem;  
   letter-spacing: 0.4px;
   position: relative;
   z-index: 10;
   box-shadow: 0 4px 16px rgba(111, 165, 153, 0.35);
   animation: fadeInUp 0.8s var(--transition-smooth) 0.25s backwards;
   overflow: hidden;
+  line-height: 1;
 }
 
 .add-icon {
-  font-size: 1.5rem;
+  font-size: 1.1rem;
   font-weight: 700;
 }
 
@@ -876,9 +877,24 @@ button {
   }
 
   .add-surah-btn {
-    width: 100%;
-    justify-content: center;
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+/* iPhone / small screens: remove side margins + reduce height */
+@media (max-width: 480px) {
+  .add-surah-btn {
+  width: auto;               /* don’t stretch full width */
+  padding: 7px 14px;         /* smaller */
+  font-size: 0.85rem;
+  border-radius: 8px;
   }
+
+  .add-icon {
+    font-size: 1.25rem;            /* optional: slightly smaller + icon */
+    line-height: 1;
+  }
+}
 
   .surahs-container {
     padding: var(--space-md);
