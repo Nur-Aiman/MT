@@ -257,8 +257,8 @@ function SurahList() {
         {/* <button className="nav-btn" onClick={() => changeDate(1)}>
           Tomorrow
         </button> */}
-        <button className="add-surah-btn" onClick={() => setIsModalOpen(true)}>
-        <span className="add-icon">+</span> Add Surah
+        <button className="nav-btn" onClick={() => setIsModalOpen(true)}>
+          Add Surah
       </button>
 
         <button className="nav-btn" onClick={() => setIsTilawahModalOpen(true)}>
