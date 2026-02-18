@@ -257,6 +257,9 @@ function SurahList() {
         {/* <button className="nav-btn" onClick={() => changeDate(1)}>
           Tomorrow
         </button> */}
+        <button className="add-surah-btn" onClick={() => setIsModalOpen(true)}>
+        <span className="add-icon">+</span> Add Surah
+      </button>
 
         <button className="nav-btn" onClick={() => setIsTilawahModalOpen(true)}>
           Tilawah
@@ -328,9 +331,7 @@ function SurahList() {
         </table>
       </div> */}
 
-      <button className="add-surah-btn" onClick={() => setIsModalOpen(true)}>
-        <span className="add-icon">+</span> Add Surah
-      </button>
+      
 
       {/* ✅ Pass userId so AddSurahModal can send x-user-id */}
       <AddSurahModal
