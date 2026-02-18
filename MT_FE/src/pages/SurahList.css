@@ -516,7 +516,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-lg);
+  padding: 12px var(--space-lg);
   background: linear-gradient(
     135deg,
     var(--color-bg-tertiary) 0%,
