@@ -148,41 +148,55 @@ router.post('/addmurajaah', async (req, res) => {
   const { surah_id } = req.body
   if (!surah_id) return res.status(400).json({ message: 'surah_id is required' })
 
+  const normalizedSurahId = parseFloat(surah_id)
+  if (!Number.isFinite(normalizedSurahId)) {
+    return res.status(400).json({ message: 'surah_id must be numeric' })
+  }
+
+  const date_time = moment.tz('Asia/Kuala_Lumpur').format()
+  const currentDate = moment.tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD')
+
+  const client = await pool.connect()
   try {
-    const totalRes = await pool.query(
+    await client.query('BEGIN')
+
+    // Lock the target surah row to serialize concurrent clicks on the same surah.
+    const surahLockRes = await client.query(
+      'SELECT id FROM memorized_surah WHERE id = $1::numeric AND user_id = $2 FOR UPDATE',
+      [normalizedSurahId, user_id]
+    )
+    if (surahLockRes.rowCount === 0) {
+      await client.query('ROLLBACK')
+      return res.status(404).json({ message: 'Surah not found for this user.' })
+    }
+
+    const totalRes = await client.query(
       'SELECT COUNT(*) FROM memorized_surah WHERE user_id = $1',
       [user_id]
     )
     const total_memorized = parseInt(totalRes.rows[0].count, 10) || 0
     if (total_memorized === 0) {
+      await client.query('ROLLBACK')
       return res.status(400).json({ message: 'No memorized surah found for this user.' })
     }
 
-    const date_time = moment.tz('Asia/Kuala_Lumpur').format()
-    const currentDate = moment.tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD')
-
-    // update counter (only this user) - cast surah_id to numeric for proper decimal support
-    const upd = await pool.query(
-  'UPDATE memorized_surah SET murajaah_counter = murajaah_counter + 1 WHERE id = $1::numeric AND user_id = $2',
-  [parseFloat(surah_id), user_id]
-)
-if (upd.rowCount === 0) {
-  return res.status(404).json({ message: 'Surah not found for this user.' })
-}
-
-
-    // get latest log (only this user)
-    const logResult = await pool.query(
-      'SELECT * FROM murajaah_log WHERE user_id = $1 ORDER BY date_time DESC LIMIT 1',
-      [user_id]
+    // get today's log in Asia/Kuala_Lumpur timezone (only this user)
+    const logResult = await client.query(
+      `SELECT *
+       FROM murajaah_log
+       WHERE user_id = $1
+         AND DATE(date_time AT TIME ZONE 'Asia/Kuala_Lumpur') = $2::date
+       ORDER BY date_time DESC
+       LIMIT 1`,
+      [user_id, currentDate]
     )
 
     const insertNewLog = async () => {
-      const surahIds = [parseFloat(surah_id)]
+      const surahIds = [normalizedSurahId]
       const completion_rate = (surahIds.length / total_memorized) * 100
 
       // Reset sequence to ensure ID doesn't duplicate
-      await pool.query(`
+      await client.query(`
         SELECT setval(
           'murajaah_log_id_seq',
           COALESCE((SELECT MAX(id) FROM murajaah_log), 0) + 1,
@@ -190,35 +204,57 @@ if (upd.rowCount === 0) {
         )
       `)
 
-      await pool.query(
+      await client.query(
         'INSERT INTO murajaah_log (surah_id, date_time, completion_rate, user_id) VALUES ($1, $2, $3, $4)',
         [surahIds, date_time, completion_rate, user_id]
       )
-      return res.status(201).send('Inserted Successfully')
+      await client.query(
+        'UPDATE memorized_surah SET murajaah_counter = murajaah_counter + 1 WHERE id = $1::numeric AND user_id = $2',
+        [normalizedSurahId, user_id]
+      )
+      await client.query('COMMIT')
+      return res.status(201).json({ message: 'Inserted Successfully', already_marked: false })
     }
 
     if (logResult.rows.length === 0) return insertNewLog()
 
     const latestLog = logResult.rows[0]
-    const logDate = moment.tz(latestLog.date_time, 'Asia/Kuala_Lumpur').format('YYYY-MM-DD')
 
-    if (logDate !== currentDate) return insertNewLog()
+    const latestIds = (latestLog.surah_id || []).map((id) => parseFloat(id)).filter(Number.isFinite)
+    const alreadyMarkedToday = latestIds.some((id) => id === normalizedSurahId)
+    if (alreadyMarkedToday) {
+      await client.query('COMMIT')
+      return res.status(200).json({ message: 'Already marked for today', already_marked: true })
+    }
 
     // avoid duplicates - convert to numeric for proper comparison
-    const merged = [...(latestLog.surah_id || []), parseFloat(surah_id)]
+    const merged = [...latestIds, normalizedSurahId]
     const unique = Array.from(new Set(merged.map(id => parseFloat(id))))
 
     const completion_rate = (unique.length / total_memorized) * 100
 
-    await pool.query(
+    await client.query(
       'UPDATE murajaah_log SET surah_id = $1, date_time = $2, completion_rate = $3 WHERE id = $4 AND user_id = $5',
       [unique, date_time, completion_rate, latestLog.id, user_id]
     )
 
-    res.status(200).send('Updated Successfully')
+    await client.query(
+      'UPDATE memorized_surah SET murajaah_counter = murajaah_counter + 1 WHERE id = $1::numeric AND user_id = $2',
+      [normalizedSurahId, user_id]
+    )
+
+    await client.query('COMMIT')
+    res.status(200).json({ message: 'Updated Successfully', already_marked: false })
   } catch (err) {
+    try {
+      await client.query('ROLLBACK')
+    } catch (rollbackErr) {
+      console.error('Rollback failed in /addmurajaah:', rollbackErr)
+    }
     console.error(err)
     res.status(500).send('Server Error')
+  } finally {
+    client.release()
   }
 })
 
@@ -282,7 +318,10 @@ router.get('/getmurajaahprogress', (req, res) => {
   if (!date) return res.status(400).json({ message: 'date is required' })
 
   pool.query(
-    'SELECT * FROM murajaah_log WHERE user_id = $1 AND DATE(date_time) = $2',
+    `SELECT *
+     FROM murajaah_log
+     WHERE user_id = $1
+       AND DATE(date_time AT TIME ZONE 'Asia/Kuala_Lumpur') = $2::date`,
     [user_id, date],
     (err, result) => {
       if (err) {

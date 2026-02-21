@@ -860,7 +860,7 @@ const actionsRow = {
 const closeButtonStyles = {
   /* marginTop: '16px',  <-- delete this line */
   padding: '10px',
-  backgroundColor: '#84a59d',
+  backgroundColor: '#d4756e',
   border: 'none',
   color: 'white',
   borderRadius: '5px',

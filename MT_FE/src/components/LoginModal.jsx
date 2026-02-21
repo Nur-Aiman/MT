@@ -146,7 +146,7 @@ function LoginModal({ isOpen, onClose }) {
                 style={{
                   padding: '11px 18px',
                   marginRight: '10px',
-                  backgroundColor: '#6fa599',
+                  backgroundColor: '#d4756e',
                   color: '#fff',
                   borderRadius: '6px',
                   border: 'none',
@@ -156,7 +156,7 @@ function LoginModal({ isOpen, onClose }) {
                   fontFamily: 'Merriweather, serif',
                 }}
               >
-                Cancel
+                Close
               </button>
               <button
                 type="submit"

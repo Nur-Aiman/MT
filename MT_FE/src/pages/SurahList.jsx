@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AddSurahModal from '../components/AddSurahModal'
 import SabaqModal from '../components/SabaqModal'
 import LoginModal from '../components/LoginModal'
 import TahajjudModal from '../components/TahajjudModal'
 import TilawahModal from '../components/TilawahModal'
+import SalahRecitationModal from '../components/SalahRecitationModal'
 import { HOST } from '../api'
 import moment from 'moment-timezone'
 import './SurahList.css'
@@ -18,13 +19,16 @@ function SurahList() {
   const [isSabaqModalOpen, setIsSabaqModalOpen] = useState(false)
   const [isTahajjudModalOpen, setIsTahajjudModalOpen] = useState(false)
   const [isTilawahModalOpen, setIsTilawahModalOpen] = useState(false)
+  const [isSalahRecitationModalOpen, setIsSalahRecitationModalOpen] = useState(false)
   const [completionRate, setCompletionRate] = useState(null)
   const [date, setDate] = useState(moment.tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD'))
   const [selectedSurah, setSelectedSurah] = useState(null)
   const [weeklyProgress, setWeeklyProgress] = useState({})
   const [maxMurajaahCount, setMaxMurajaahCount] = useState(0)
+  const [savingMurajaahById, setSavingMurajaahById] = useState({})
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
   const [expandedParents, setExpandedParents] = useState({})
+  const inFlightMurajaahRef = useRef({})
 
   const navigate = useNavigate()
 
@@ -49,6 +53,21 @@ function SurahList() {
     ...headers,
     'x-user-id': String(userId),
   })
+
+  const normalizeSurahId = (id) => {
+    const numericId = Number(id)
+    return Number.isFinite(numericId) ? String(numericId) : String(id)
+  }
+
+  const isSurahCheckedToday = (id) => {
+    const key = normalizeSurahId(id)
+    return !!checkedSurahs[key]
+  }
+
+  const isMurajaahSaving = (id) => {
+    const key = normalizeSurahId(id)
+    return !!savingMurajaahById[key]
+  }
 
   useEffect(() => {
     if (!userId) return
@@ -96,14 +115,14 @@ function SurahList() {
       .then((res) => res.json())
       .then((data) => {
         const newCheckedSurahs = surahList.reduce((obj, surah) => {
-          obj[surah.id] = false
+          obj[normalizeSurahId(surah.id)] = false
           return obj
         }, {})
 
         if (Array.isArray(data) && data.length > 0) {
           const checkedIds = data.reduce((arr, row) => arr.concat(row.surah_id || []), [])
           checkedIds.forEach((id) => {
-            newCheckedSurahs[id] = true
+            newCheckedSurahs[normalizeSurahId(id)] = true
           })
           setCompletionRate(Number(data[0].completion_rate || 0))
         } else {
@@ -167,66 +186,55 @@ function SurahList() {
 
   const handleCheck = (id, event) => {
     event.stopPropagation()
+    const idKey = normalizeSurahId(id)
+    if (isSurahCheckedToday(idKey) || isMurajaahSaving(idKey) || inFlightMurajaahRef.current[idKey]) return
+    inFlightMurajaahRef.current[idKey] = true
 
-    const newCheckedState = !checkedSurahs[id]
-    const updatedCount = newCheckedState ? 1 : -1
-    
-    // ✅ Count only LEAF NODES (subsections OR surahs without subsections)
-    const leafNodes = Array.isArray(surahs) 
-      ? surahs.filter(s => {
-          // A leaf node is either:
-          // 1. Has a parent (is a subsection), OR
-          // 2. Is a parent but has no subsections (shouldn't happen but safe guard)
-          const isSubsection = !!s.parent_id
-          
-          // Check if this is a parent with subsections by looking at all surahs
-          const hasSubsections = surahs.some(other => Number(other.parent_id) === Number(s.id))
-          
-          // Leaf = is subsection OR (not a parent with subsections)
-          return isSubsection || !hasSubsections
-        })
-      : []
-    
-    // Count currently checked leaf nodes
-    const checkedLeafCount = Object.entries(checkedSurahs)
-      .filter(([surahId, isChecked]) => {
-        if (!isChecked) return false
-        return leafNodes.some(leaf => Number(leaf.id) === Number(surahId))
-      })
-      .length
+    setSavingMurajaahById((prev) => ({ ...prev, [idKey]: true }))
 
-    // Add the newly checked/unchecked item if it's a leaf node
-    const updatedCheckedLeafCount = leafNodes.some(leaf => Number(leaf.id) === Number(id))
-      ? checkedLeafCount + updatedCount
-      : checkedLeafCount
-
-    const optimisticCompletionRate = leafNodes.length > 0 
-      ? (updatedCheckedLeafCount / leafNodes.length) * 100 
-      : 0
-
-    setCompletionRate(optimisticCompletionRate)
-
-    const updatedCheckedSurahs = { ...checkedSurahs, [id]: newCheckedState }
-    setCheckedSurahs(updatedCheckedSurahs)
-
-    fetch(`${HOST}/murajaah/addmurajaah`, {
-      method: 'POST',
-      headers: withUserHeaders({
-        'Content-Type': 'application/json',
-      }),
-      body: JSON.stringify({ surah_id: id }),
+    fetch(`${HOST}/murajaah/getmurajaahprogress?date=${date}`, {
+      headers: withUserHeaders(),
     })
-      .then(async (res) => {
-        if (!res.ok) throw new Error('Failed to update murajaah')
-        const text = await res.text()
-        console.log('Murajaah updated:', text)
+      .then((res) => res.json())
+      .then((progressData) => {
+        const checkedIdsFromDb = Array.isArray(progressData)
+          ? progressData.reduce((arr, row) => arr.concat(row.surah_id || []), [])
+          : []
+
+        const alreadyCheckedInDb = checkedIdsFromDb.some(
+          (checkedId) => normalizeSurahId(checkedId) === idKey
+        )
+
+        if (alreadyCheckedInDb) {
+          setCheckedSurahs((prev) => ({ ...prev, [idKey]: true }))
+          return
+        }
+
+        return fetch(`${HOST}/murajaah/addmurajaah`, {
+          method: 'POST',
+          headers: withUserHeaders({
+            'Content-Type': 'application/json',
+          }),
+          body: JSON.stringify({ surah_id: id }),
+        }).then(async (res) => {
+          if (!res.ok) throw new Error('Failed to update murajaah')
+          const payload = await res.json().catch(() => ({}))
+          setCheckedSurahs((prev) => ({ ...prev, [idKey]: true }))
+          if (!payload?.already_marked) {
+            fetchSurahs()
+          }
+        })
       })
       .catch((error) => {
         console.error('An error occurred while updating murajaah:', error)
       })
+      .finally(() => {
+        setSavingMurajaahById((prev) => ({ ...prev, [idKey]: false }))
+        delete inFlightMurajaahRef.current[idKey]
+      })
   }
 
-  // ✅ Toggle parent expand/collapse
+  // Toggle parent expand/collapse
   const toggleParentExpand = (parentId, event) => {
     event.stopPropagation()
     setExpandedParents(prev => ({
@@ -258,7 +266,7 @@ function SurahList() {
           Tomorrow
         </button> */}
         <button className="nav-btn" onClick={() => setIsModalOpen(true)}>
-          Add Surah
+          Add Memorized Surah
       </button>
 
         <button className="nav-btn" onClick={() => setIsTilawahModalOpen(true)}>
@@ -267,6 +275,10 @@ function SurahList() {
 
         <button className="nav-btn" onClick={() => setIsSabaqModalOpen(true)}>
           Sabaq
+        </button>
+
+        <button className="nav-btn" onClick={() => setIsSalahRecitationModalOpen(true)}>
+          Salah Recitation
         </button>
 
         <button className="nav-btn logout-btn" onClick={() => {
@@ -294,6 +306,16 @@ function SurahList() {
         isOpen={isTahajjudModalOpen}
         onClose={() => setIsTahajjudModalOpen(false)}
         userId={userId}
+      />
+
+      <SalahRecitationModal
+        isOpen={isSalahRecitationModalOpen}
+        onClose={() => setIsSalahRecitationModalOpen(false)}
+        surahs={surahs}
+        checkedSurahs={checkedSurahs}
+        date={date}
+        userId={userId}
+        onMurajaahUpdated={fetchSurahs}
       />
 
       {/* {completionRate !== null && (
@@ -357,7 +379,7 @@ function SurahList() {
                   const isExpanded = expandedParents[surah.id]
                   const subsectionCount = surah.subsections ? surah.subsections.length : 0
                   const completedSubsections = surah.subsections 
-                    ? surah.subsections.filter(s => checkedSurahs[s.id]).length 
+                    ? surah.subsections.filter(s => isSurahCheckedToday(s.id)).length 
                     : 0
 
                   return (
@@ -439,16 +461,22 @@ function SurahList() {
 
                         {!isParent && (
                           <button
-                            className={`check-btn ${checkedSurahs[surah.id] ? 'checked' : ''}`}
-                            onClick={(event) => !checkedSurahs[surah.id] && handleCheck(surah.id, event)}
-                            disabled={checkedSurahs[surah.id]}
+                            className={`check-btn ${isSurahCheckedToday(surah.id) ? 'checked' : ''}`}
+                            onClick={(event) =>
+                              !isSurahCheckedToday(surah.id) &&
+                              !isMurajaahSaving(surah.id) &&
+                              handleCheck(surah.id, event)
+                            }
+                            disabled={isSurahCheckedToday(surah.id) || isMurajaahSaving(surah.id)}
                           >
-                            {checkedSurahs[surah.id] ? (
+                            {isSurahCheckedToday(surah.id) ? (
                               <svg className="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                                 <polyline points="20 6 9 17 4 12"></polyline>
                               </svg>
                             ) : (
-                              'Check'
+                              <svg className="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                              </svg>
                             )}
                           </button>
                         )}
@@ -494,16 +522,22 @@ function SurahList() {
                               </div>
 
                               <button
-                                className={`check-btn ${checkedSurahs[subsection.id] ? 'checked' : ''}`}
-                                onClick={(event) => !checkedSurahs[subsection.id] && handleCheck(subsection.id, event)}
-                                disabled={checkedSurahs[subsection.id]}
+                                className={`check-btn ${isSurahCheckedToday(subsection.id) ? 'checked' : ''}`}
+                                onClick={(event) =>
+                                  !isSurahCheckedToday(subsection.id) &&
+                                  !isMurajaahSaving(subsection.id) &&
+                                  handleCheck(subsection.id, event)
+                                }
+                                disabled={isSurahCheckedToday(subsection.id) || isMurajaahSaving(subsection.id)}
                               >
-                                {checkedSurahs[subsection.id] ? (
+                                {isSurahCheckedToday(subsection.id) ? (
                                   <svg className="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                                     <polyline points="20 6 9 17 4 12"></polyline>
                                   </svg>
                                 ) : (
-                                  'Check'
+                                  <svg className="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                  </svg>
                                 )}
                               </button>
                             </div>
@@ -522,3 +556,4 @@ function SurahList() {
 }
 
 export default SurahList
+

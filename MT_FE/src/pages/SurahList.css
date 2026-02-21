@@ -734,7 +734,7 @@ button {
    CHECK BUTTON
    ============================================ */
 .check-btn {
-  padding: var(--space-sm) var(--space-md);
+  padding: 0;
   background-color: var(--color-bg-secondary);
   color: var(--color-text-primary);
   border: 1.5px solid var(--color-accent-secondary);
@@ -742,11 +742,16 @@ button {
   font-weight: 600;
   font-size: var(--size-sm);
   letter-spacing: 0.3px;
-  min-width: 80px;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
   position: relative;
   overflow: hidden;
   transition: all var(--transition-smooth);
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .check-btn::before {
@@ -844,7 +849,9 @@ button {
   }
 
   .check-btn {
-    width: 100%;
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
   }
 
   .progress-card,

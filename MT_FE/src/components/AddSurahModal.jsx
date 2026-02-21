@@ -344,20 +344,22 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData, userId }) {
               </label>
             ))}
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-              <button style={buttonStyle} type="submit">
-                {isEditMode ? 'Update' : 'Add'}
-              </button>
-
-              <button style={buttonStyle} type="button" onClick={onClose}>
-                Cancel
-              </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>                            
 
               {isEditMode && (
                 <button style={deleteButtonStyle} type="button" onClick={handleDeleteSurah}>
                   Delete
                 </button>
               )}
+
+              <button style={closeButtonStyle} type="button" onClick={onClose}>
+                Close
+              </button>
+
+              <button style={buttonStyle} type="submit">
+                {isEditMode ? 'Update' : 'Add'}
+              </button>
+
             </div>
           </form>
         )}
@@ -382,6 +384,18 @@ const deleteButtonStyle = {
 const buttonStyle = {
   padding: '11px 18px',
   backgroundColor: '#3a8a7d',
+  color: '#fff',
+  borderRadius: '6px',
+  border: 'none',
+  cursor: 'pointer',
+  transition: 'background-color 0.3s',
+  fontWeight: 600,
+  fontFamily: 'Merriweather, serif',
+}
+
+const closeButtonStyle = {
+  padding: '11px 18px',
+  backgroundColor: '#d4756e',
   color: '#fff',
   borderRadius: '6px',
   border: 'none',

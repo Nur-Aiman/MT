@@ -372,7 +372,7 @@ if (todaysLogs.length > 0) {
         </div>
 
         <div className="tilawah-modal-footer">
-          <button className="tilawah-btn tilawah-btn-secondary" onClick={onClose}>
+          <button className="tilawah-btn tilawah-btn-close" onClick={onClose}>
             Close
           </button>
         </div>

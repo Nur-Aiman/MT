@@ -45,7 +45,7 @@
   background: none;
   border: none;
   font-size: 28px;
-  color: #3a8a7d;
+  color: #d4756e;
   cursor: pointer;
   padding: 0;
   width: 32px;
@@ -58,7 +58,7 @@
 }
 
 .tilawah-modal-close:hover {
-  background-color: rgba(106, 165, 153, 0.1);
+  background-color: rgba(212, 117, 110, 0.14);
 }
 
 .tilawah-modal-body {
@@ -289,6 +289,22 @@
 
 .tilawah-btn-secondary:disabled {
   background-color: #8cb0a5;
+  cursor: not-allowed;
+}
+
+.tilawah-btn-close {
+  background-color: #d4756e;
+  color: white;
+}
+
+.tilawah-btn-close:hover:not(:disabled) {
+  background-color: #c15d54;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(212, 117, 110, 0.3);
+}
+
+.tilawah-btn-close:disabled {
+  background-color: #e5b0a8;
   cursor: not-allowed;
 }
 
