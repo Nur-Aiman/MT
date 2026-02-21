@@ -299,7 +299,6 @@ function SalahRecitationModal({
                   <thead>
                     <tr>
                       <th>Prayer</th>
-                      <th>Rakaat</th>
                       <th>Recitation</th>
                       <th>Murajaah Count</th>
                       <th>Murajaah</th>
@@ -312,8 +311,7 @@ function SalahRecitationModal({
 
                       return (
                         <tr key={`${item.prayer}-${item.rakaat}-${index}`}>
-                          <td>{item.prayer}</td>
-                          <td>{item.rakaat}</td>
+                          <td>{`${item.prayer}-R${item.rakaat}`}</td>
                           <td>
                             {item.surah.chapter_name} ({item.surah.id})
                           </td>

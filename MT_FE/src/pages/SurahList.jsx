@@ -273,12 +273,13 @@ function SurahList() {
           Tilawah
         </button>
 
-        <button className="nav-btn" onClick={() => setIsSabaqModalOpen(true)}>
-          Sabaq
-        </button>
 
         <button className="nav-btn" onClick={() => setIsSalahRecitationModalOpen(true)}>
           Salah Recitation
+        </button>
+
+        <button className="nav-btn" onClick={() => setIsSabaqModalOpen(true)}>
+          Sabaq
         </button>
 
         <button className="nav-btn logout-btn" onClick={() => {
