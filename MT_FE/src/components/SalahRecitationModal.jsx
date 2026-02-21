@@ -88,13 +88,26 @@ function SalahRecitationModal({
     return map
   }, [surahs])
 
+  const parentSurahIdSet = useMemo(() => {
+    const set = new Set()
+    surahs.forEach((surah) => {
+      if (surah?.parent_id == null || surah.parent_id === '') return
+      set.add(normalizeSurahId(surah.parent_id))
+    })
+    return set
+  }, [surahs])
+
   const memorizedSurahs = useMemo(() => {
     if (!Array.isArray(surahs)) return []
     const uniqueById = Array.from(
       new Map(surahs.map((surah) => [normalizeSurahId(surah.id), surah])).values()
     )
-    return uniqueById.filter((surah) => getRecitableVerseCount(surah) > 0)
-  }, [surahs])
+    return uniqueById.filter((surah) => {
+      const isParentSurah = parentSurahIdSet.has(normalizeSurahId(surah.id))
+      if (isParentSurah) return false
+      return getRecitableVerseCount(surah) > 0
+    })
+  }, [surahs, parentSurahIdSet])
 
   const baselineLeastReviewedSurahs = useMemo(
     () =>
