@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { HOST } from '../api';
 
 // ---------- helpers ----------
@@ -117,6 +117,14 @@ const SabaqModal = ({ isOpen, onClose, userId }) => {
   const [errorText, setErrorText] = useState('');
   const [pageChapterRange, setPageChapterRange] = useState(null);
 
+  // Audio player state
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [loopEnabled, setLoopEnabled] = useState(false);
+  const [audioUrl, setAudioUrl] = useState('');
+  const [audioPlaylist, setAudioPlaylist] = useState([]);
+  const [currentAyahIndex, setCurrentAyahIndex] = useState(0);
+  const audioRef = useRef(null);
+
   const withUserHeaders = (headers = {}) => ({
     ...headers,
     'x-user-id': String(userId),
@@ -132,6 +140,131 @@ const SabaqModal = ({ isOpen, onClose, userId }) => {
           ? Number(value)
           : value
     }));
+  };
+
+  // Extract verse range from "1 - 5" format to {start: 1, end: 5}
+  const parseVerseRange = (verseStr) => {
+    if (!verseStr) return null;
+    const parts = verseStr.split('-').map(p => parseInt(p.trim(), 10));
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+      return { start: parts[0], end: parts[1] };
+    }
+    return null;
+  };
+
+  // Fetch Quran audio URL from API based on surah and verse range
+  const fetchQuranAudio = async (surah, verseStart, verseEnd) => {
+    try {
+      const response = await fetch(`https://staticquran.vercel.app/api/v1/surah/${surah}`);
+      if (!response.ok) throw new Error('Failed to fetch Quran audio API');
+      
+      const data = await response.json();
+      
+      // The API returns data.ayah array with verse audio URLs
+      if (data.data && data.data.ayah && Array.isArray(data.data.ayah)) {
+        // Filter ayahs in the verse range
+        const selectedAyahs = data.data.ayah.filter(
+          ayah => ayah.sequence.surah >= verseStart && ayah.sequence.surah <= verseEnd
+        );
+        
+        if (selectedAyahs.length > 0) {
+          // Collect all audio URLs for smooth sequential playback
+          const audioUrls = selectedAyahs
+            .filter(ayah => ayah.recitation && ayah.recitation.audio)
+            .map(ayah => ayah.recitation.audio);
+          
+          if (audioUrls.length > 0) {
+            // Store playlist and return first URL
+            setAudioPlaylist(audioUrls);
+            setCurrentAyahIndex(0);
+            return audioUrls[0];
+          }
+        }
+      }
+      
+      throw new Error('No audio found for this verse range');
+    } catch (error) {
+      console.error('Error fetching Quran audio:', error);
+      setErrorText(`Error fetching audio: ${error.message}`);
+      return null;
+    }
+  };
+
+  // Play/pause handler
+  const handlePlayPause = async () => {
+    if (!audioRef.current) return;
+
+    // If audio is already loaded and playing, just pause
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+      return;
+    }
+
+    // If audio URL not set, fetch it first
+    if (!audioUrl) {
+      const verseRange = parseVerseRange(formData.verse);
+      if (!verseRange || !formData.chapter_number) {
+        setErrorText('Please select chapter and section to play audio');
+        return;
+      }
+
+      const url = await fetchQuranAudio(
+        formData.chapter_number,
+        verseRange.start,
+        verseRange.end
+      );
+      
+      if (!url) return;
+      
+      setAudioUrl(url);
+      audioRef.current.src = url;
+      
+      try {
+        await audioRef.current.play();
+        setIsPlaying(true);
+      } catch (error) {
+        console.error('Error playing audio:', error);
+        setErrorText('Failed to play audio. Please try again.');
+      }
+    } else {
+      // Resume playing
+      try {
+        await audioRef.current.play();
+        setIsPlaying(true);
+      } catch (error) {
+        console.error('Error resuming audio:', error);
+        setErrorText('Failed to resume audio. Please try again.');
+      }
+    }
+  };
+
+  // Handle audio ended event
+  const handleAudioEnded = () => {
+    // If there are more verses in the playlist, play the next one
+    if (audioPlaylist.length > 0 && currentAyahIndex < audioPlaylist.length - 1) {
+      const nextIndex = currentAyahIndex + 1;
+      setCurrentAyahIndex(nextIndex);
+      if (audioRef.current) {
+        audioRef.current.src = audioPlaylist[nextIndex];
+        audioRef.current.play().catch(error => {
+          console.error('Error playing next verse:', error);
+        });
+      }
+    } else if (loopEnabled) {
+      // Loop back to the beginning
+      setCurrentAyahIndex(0);
+      if (audioRef.current) {
+        audioRef.current.src = audioPlaylist[0];
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(error => {
+          console.error('Error looping audio:', error);
+        });
+      }
+    } else {
+      // End of playlist, stop playing
+      setIsPlaying(false);
+    }
   };
 
   // Load latest sabaq to rehydrate UI (✅ user-aware)
@@ -384,10 +517,18 @@ const toRangeString = (min, max) =>
   Array.from({ length: max - min + 1 }, (_, i) => String(min + i)).join(',');
 
 
-  if (!isOpen) return null;
-
   return (
-    <div style={modalStyles} onClick={onClose}>
+    <>
+      {/* Hidden audio element - always in DOM for background playback */}
+      <audio
+        ref={audioRef}
+        onEnded={handleAudioEnded}
+        crossOrigin="anonymous"
+      />
+
+      {/* Modal - shown/hidden based on isOpen */}
+      {isOpen && (
+      <div style={modalStyles} onClick={onClose}>
       <div style={modalContentStyles} onClick={(e) => e.stopPropagation()}>
         <h2 style={{ borderBottom: '2px solid #84a59d', paddingBottom: '10px' }}>Add Sabaq Record</h2>
 
@@ -506,7 +647,42 @@ const toRangeString = (min, max) =>
   </div>
 </div>
 
+{/* Audio Player Controls */}
+<div style={audioControlsSection}>
+  <div style={audioControlsCard}>
+    <div style={audioControlTitleRow}>
+      <div style={audioControlTitle}>Recitation Audio</div>
+      <button
+        type="button"
+        onClick={handlePlayPause}
+        disabled={!formData.chapter_number || !formData.verse}
+        style={{
+          ...audioButton,
+          opacity: (!formData.chapter_number || !formData.verse) ? 0.5 : 1,
+          cursor: (!formData.chapter_number || !formData.verse) ? 'not-allowed' : 'pointer',
+          backgroundColor: isPlaying ? '#e74c3c' : '#27ae60',
+          width: 44,
+          height: 44,
+          padding: '8px',
+          minWidth: 'unset',
+        }}
+        title={isPlaying ? 'Pause' : 'Play'}
+      >
+        {isPlaying ? '⏸' : '▶'}
+      </button>
+    </div>
 
+    <label style={audioLoopLabel}>
+      <input
+        type="checkbox"
+        checked={loopEnabled}
+        onChange={(e) => setLoopEnabled(e.target.checked)}
+        disabled={!formData.chapter_number || !formData.verse}
+      />
+      <span style={{ marginLeft: 8, fontSize: 14 }}>Loop Recitation</span>
+    </label>
+  </div>
+</div>
 
 
 
@@ -716,6 +892,8 @@ const toRangeString = (min, max) =>
         
       </div>
     </div>
+      )}
+    </>
   );
 };
 
@@ -894,6 +1072,67 @@ const sectionBoxActive = {
   borderColor: '#2a9d8f',
 };
 
+// Audio player styles
+const audioControlsSection = {
+  display: 'flex',
+  justifyContent: 'center',
+  marginTop: 16,
+  marginBottom: 8,
+};
 
+const audioControlsCard = {
+  minWidth: 220,
+  background: '#f8fafc',
+  border: '1px solid #e2e8f0',
+  borderRadius: 12,
+  padding: '14px 16px',
+  textAlign: 'center',
+  boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+  maxWidth: 300,
+};
+
+const audioControlTitle = {
+  fontWeight: 600,
+  color: '#0f172a',
+  fontSize: 14,
+};
+
+const audioControlTitleRow = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: 12,
+  gap: 8,
+};
+
+const audioButtonsContainer = {
+  display: 'flex',
+  justifyContent: 'center',
+  marginBottom: 12,
+  gap: 8,
+};
+
+const audioButton = {
+  border: 'none',
+  color: '#fff',
+  borderRadius: 8,
+  cursor: 'pointer',
+  fontSize: 18,
+  fontWeight: 600,
+  transition: 'background-color 0.3s',
+};
+
+const audioLoopLabel = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '8px 12px',
+  background: '#ffffff',
+  border: '1px solid #e2e8f0',
+  borderRadius: 8,
+  cursor: 'pointer',
+  fontWeight: 600,
+  userSelect: 'none',
+};
 
 export default SabaqModal;
