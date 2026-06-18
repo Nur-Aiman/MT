@@ -232,11 +232,14 @@ class GoogleCalendarService {
       .sort((a, b) => Number(a) - Number(b))
       .forEach((juz) => {
         description += `\nJuz ${juz} :\n`
-        surahsByJuz[juz].forEach((surah) => {
-          const verses = surah.verse_memorized || 0
-          const totalVerse = surah.total_verse || 0
-          description += `${surah.id}) ${surah.chapter_name || `Surah ${surah.id}`} (Verses: ${verses} / ${totalVerse})\n`
-        })
+        // Sort surahs within each Juz by ID in ascending order
+        surahsByJuz[juz]
+          .sort((a, b) => a.id - b.id)
+          .forEach((surah) => {
+            const verses = surah.verse_memorized || 0
+            const totalVerse = surah.total_verse || 0
+            description += `${surah.id}) ${surah.chapter_name || `Surah ${surah.id}`} (Verses: ${verses} / ${totalVerse})\n`
+          })
       })
 
     description += '\n' + '═'.repeat(50) + '\n'
