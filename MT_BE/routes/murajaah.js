@@ -3,7 +3,8 @@ var router = express.Router()
 const axios = require('axios');
 const moment = require('moment-timezone')
 const { query, pool } = require('../config/database')
-const nodemailer = require('nodemailer');
+const nodemailer = require('nodemailer')
+const googleCalendar = require('../config/googleCalendar')
 
 const getUserId = (req) => {
   const raw =
@@ -212,6 +213,14 @@ router.post('/addmurajaah', async (req, res) => {
         'UPDATE memorized_surah SET murajaah_counter = murajaah_counter + 1 WHERE id = $1::numeric AND user_id = $2',
         [normalizedSurahId, user_id]
       )
+
+      // Sync with Google Calendar (if enabled)
+      try {
+        await syncMurajaahWithGoogleCalendar(client, user_id, currentDate, surahIds)
+      } catch (calError) {
+        console.warn('⚠️ Warning: Google Calendar sync failed (non-critical):', calError.message)
+      }
+
       await client.query('COMMIT')
       return res.status(201).json({ message: 'Inserted Successfully', already_marked: false })
     }
@@ -244,6 +253,14 @@ router.post('/addmurajaah', async (req, res) => {
     )
 
     await client.query('COMMIT')
+
+    // Sync with Google Calendar (if enabled)
+    try {
+      await syncMurajaahWithGoogleCalendar(client, user_id, currentDate, unique)
+    } catch (calError) {
+      console.warn('⚠️ Warning: Google Calendar sync failed (non-critical):', calError.message)
+    }
+
     res.status(200).json({ message: 'Updated Successfully', already_marked: false })
   } catch (err) {
     try {
@@ -257,6 +274,65 @@ router.post('/addmurajaah', async (req, res) => {
     client.release()
   }
 })
+
+/**
+ * Helper function to sync murajaah activity with Google Calendar
+ */
+async function syncMurajaahWithGoogleCalendar(client, userId, eventDate, surahIds) {
+  try {
+    // Check if Google Calendar is enabled
+    if (!process.env.GOOGLE_CREDENTIALS) {
+      console.log('ℹ️ Google Calendar not configured (GOOGLE_CREDENTIALS not set)')
+      return
+    }
+
+    // Fetch surah details for the event description
+    const surahDetailsResult = await client.query(
+      `SELECT id, chapter_name, verse_memorized, total_verse 
+       FROM memorized_surah 
+       WHERE id::numeric = ANY($1::numeric[]) AND user_id = $2`,
+      [surahIds.map(id => parseFloat(id)), userId]
+    )
+
+    const surahDetails = surahDetailsResult.rows || []
+
+    // Create or update Google Calendar event
+    const calendarResult = await googleCalendar.createOrUpdateMurajaahEvent(
+      userId,
+      eventDate,
+      surahIds,
+      surahDetails
+    )
+
+    // Store or update calendar event ID in database
+    await storeCalendarEventId(client, userId, eventDate, calendarResult.eventId)
+
+    console.log('✅ Google Calendar sync successful:', calendarResult)
+    return calendarResult
+  } catch (error) {
+    console.error('❌ Error syncing with Google Calendar:', error)
+    throw error
+  }
+}
+
+/**
+ * Helper function to store or update calendar event ID
+ */
+async function storeCalendarEventId(client, userId, eventDate, eventId) {
+  try {
+    // Use ON CONFLICT to handle both insert and update in one query
+    await client.query(
+      `INSERT INTO calendar_events (user_id, event_date, google_event_id, calendar_name)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, event_date) 
+       DO UPDATE SET google_event_id = $3, updated_at = CURRENT_TIMESTAMP`,
+      [userId, eventDate, eventId, process.env.GOOGLE_CALENDAR_NAME || 'qk79io4u5ku7apiok8btsajc5k@group.calendar.google.com']
+    )
+  } catch (error) {
+    console.error('❌ Error storing calendar event ID:', error)
+    throw error
+  }
+}
 
 
 // @desc Update Surah Details
