@@ -187,17 +187,26 @@ class GoogleCalendarService {
 
   /**
    * Get the Juz number for a surah (1-30)
+   * Based on traditional Juz divisions of the Quran
    */
   getJuzForSurah(surahId) {
-    // Juz boundaries (surah numbers at the start of each Juz)
-    const juzBoundaries = [1, 2, 3, 4, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 30, 32, 34, 36, 37, 39, 40, 41, 42, 46, 50, 51, 56]
-    
-    for (let i = 0; i < juzBoundaries.length; i++) {
-      if (i === juzBoundaries.length - 1 || surahId < juzBoundaries[i + 1]) {
-        return i + 1
-      }
+    // Complete mapping of surah IDs to Juz numbers
+    const surahToJuz = {
+      1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 10: 9,
+      11: 11, 12: 12, 13: 13, 14: 13, 15: 14, 16: 14, 17: 15, 18: 16, 19: 16, 20: 16,
+      21: 17, 22: 17, 23: 18, 24: 18, 25: 18, 26: 19, 27: 19, 28: 20, 29: 20, 30: 20,
+      31: 21, 32: 21, 33: 21, 34: 21, 35: 22, 36: 22, 37: 22, 38: 23, 39: 23, 40: 24,
+      41: 24, 42: 25, 43: 25, 44: 25, 45: 25, 46: 26, 47: 26, 48: 26, 49: 26, 50: 26,
+      51: 26, 52: 27, 53: 27, 54: 27, 55: 27, 56: 27, 57: 27, 58: 28, 59: 28, 60: 28,
+      61: 28, 62: 28, 63: 28, 64: 28, 65: 28, 66: 28, 67: 29, 68: 29, 69: 29, 70: 29,
+      71: 29, 72: 29, 73: 29, 74: 29, 75: 29, 76: 29, 77: 29, 78: 30, 79: 30, 80: 30,
+      81: 30, 82: 30, 83: 30, 84: 30, 85: 30, 86: 30, 87: 30, 88: 30, 89: 30, 90: 30,
+      91: 30, 92: 30, 93: 30, 94: 30, 95: 30, 96: 30, 97: 30, 98: 30, 99: 30, 100: 30,
+      101: 30, 102: 30, 103: 30, 104: 30, 105: 30, 106: 30, 107: 30, 108: 30, 109: 30, 110: 30,
+      111: 30, 112: 30, 113: 30, 114: 30
     }
-    return 30 // Default to Juz 30 for surahs beyond our data
+    
+    return surahToJuz[surahId] || 30 // Default to Juz 30 if not found
   }
 
   /**
