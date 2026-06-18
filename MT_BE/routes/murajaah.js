@@ -288,7 +288,7 @@ async function syncMurajaahWithGoogleCalendar(client, userId, eventDate, surahId
 
     // Fetch surah details for the event description
     const surahDetailsResult = await client.query(
-      `SELECT id, chapter_name, verse_memorized, total_verse 
+      `SELECT id, chapter_name, verse_memorized, total_verse, juz
        FROM memorized_surah 
        WHERE id::numeric = ANY($1::numeric[]) AND user_id = $2`,
       [surahIds.map(id => parseFloat(id)), userId]
