@@ -245,8 +245,6 @@ class GoogleCalendarService {
 
     return description
   }
-  }
-
   /**
    * Delete a calendar event
    */
