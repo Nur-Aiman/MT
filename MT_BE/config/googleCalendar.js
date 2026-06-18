@@ -103,9 +103,15 @@ class GoogleCalendarService {
       // Build event description
       const description = this.buildEventDescription(surahDetails)
 
-      // Create event object
+      // Calculate total verses for the summary
+      let totalVerses = 0
+      surahDetails.forEach((surah) => {
+        totalVerses += surah.verse_memorized || 0
+      })
+
+      // Create event object with enhanced summary
       const event = {
-        summary: `Murajaah - ${surahIds.length} surah(s)`,
+        summary: `✅Murajaah - ${surahIds.length} surah(s) | ${totalVerses} verse(s)`,
         description: description,
         start: {
           date: eventDate, // All-day event
@@ -180,27 +186,65 @@ class GoogleCalendarService {
   }
 
   /**
-   * Build descriptive text for the calendar event
+   * Get the Juz number for a surah (1-30)
+   */
+  getJuzForSurah(surahId) {
+    // Juz boundaries (surah numbers at the start of each Juz)
+    const juzBoundaries = [1, 2, 3, 4, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 30, 32, 34, 36, 37, 39, 40, 41, 42, 46, 50, 51, 56]
+    
+    for (let i = 0; i < juzBoundaries.length; i++) {
+      if (i === juzBoundaries.length - 1 || surahId < juzBoundaries[i + 1]) {
+        return i + 1
+      }
+    }
+    return 30 // Default to Juz 30 for surahs beyond our data
+  }
+
+  /**
+   * Build descriptive text for the calendar event with Juz grouping
    */
   buildEventDescription(surahDetails) {
     if (!Array.isArray(surahDetails) || surahDetails.length === 0) {
       return 'Daily Quranic revision (Murajaah) completed.'
     }
 
-    let description = 'Murajaah (Daily Quranic Revision)\n'
-    description += '═'.repeat(40) + '\n\n'
-
-    surahDetails.forEach((surah, index) => {
-      description += `${index + 1}. ${surah.chapter_name || `Surah ${surah.id}`}\n`
-      description += `   ID: ${surah.id}\n`
-      description += `   Verses: ${surah.verse_memorized || 0} / ${surah.total_verse || 0}\n\n`
+    // Calculate total verses
+    let totalVerses = 0
+    surahDetails.forEach((surah) => {
+      totalVerses += surah.verse_memorized || 0
     })
 
-    description += '═'.repeat(40) + '\n'
+    // Group surahs by Juz
+    const surahsByJuz = {}
+    surahDetails.forEach((surah) => {
+      const juz = this.getJuzForSurah(surah.id)
+      if (!surahsByJuz[juz]) {
+        surahsByJuz[juz] = []
+      }
+      surahsByJuz[juz].push(surah)
+    })
+
+    // Build description
+    let description = 'Murajaah :\n'
+
+    // Add each Juz section
+    Object.keys(surahsByJuz)
+      .sort((a, b) => Number(a) - Number(b))
+      .forEach((juz) => {
+        description += `\nJuz ${juz} :\n`
+        surahsByJuz[juz].forEach((surah) => {
+          const verses = surah.verse_memorized || 0
+          const totalVerse = surah.total_verse || 0
+          description += `${surah.id}) ${surah.chapter_name || `Surah ${surah.id}`} (Verses: ${verses} / ${totalVerse})\n`
+        })
+      })
+
+    description += '\n' + '═'.repeat(50) + '\n'
     description += `Total Surahs: ${surahDetails.length}\n`
-    description += `Time: ${moment.tz('Asia/Kuala_Lumpur').format('HH:mm:ss')} (Malaysia Time)`
+    description += `Total Verses: ${totalVerses}\n`
 
     return description
+  }
   }
 
   /**
