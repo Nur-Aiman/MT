@@ -1,4 +1,4 @@
-/* ============================================
+﻿/* ============================================
    DESIGN TOKENS & VARIABLES
    ============================================ */
 :root {
@@ -608,14 +608,16 @@ button {
 .surah-card--parent {
   border-left: 4px solid var(--color-accent-primary);
   padding-right: var(--space-md);
+  cursor: pointer;
 }
 
-.surah-card--parent:hover {
+.surah-card--parent.surah-card--expanded {
   background: linear-gradient(
     135deg,
-    var(--color-bg-secondary) 0%,
-    rgba(111, 165, 153, 0.12) 100%
+    rgba(111, 165, 153, 0.06) 0%,
+    rgba(58, 138, 125, 0.04) 100%
   );
+  border-color: var(--color-accent-secondary);
 }
 
 .expand-btn {
@@ -684,6 +686,9 @@ button {
     rgba(58, 138, 125, 0.04) 0%,
     rgba(212, 165, 116, 0.02) 100%
   );
+  padding: 12px var(--space-md);
+  flex-direction: row;
+  align-items: center;
 }
 
 .surah-card--subsection:hover {
@@ -692,6 +697,7 @@ button {
     rgba(58, 138, 125, 0.08) 0%,
     rgba(111, 165, 153, 0.06) 100%
   );
+  border-left-color: var(--color-accent-primary);
 }
 
 .subsection-number {
@@ -848,11 +854,28 @@ button {
     margin-bottom: var(--space-md);
   }
 
+  .subsections-container {
+    padding-left: var(--space-md);
+    gap: var(--space-sm);
+  }
+
+  .surah-card--subsection {
+    margin-left: 0;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .expand-btn {
+    width: 32px;
+    height: 32px;
+    margin-right: var(--space-md);
+  }
+
   .check-btn {
-    width: 30px;
-    height: 30px;
-    min-width: 30px;
-    align-self: flex-end;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    align-self: center;
     margin-left: auto;
   }
 
@@ -880,37 +903,92 @@ button {
   }
 }
 
+/* ============================================
+   FOCUS STATES & KEYBOARD NAVIGATION
+   ============================================ */
+button:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 2px;
+}
+
+.surah-card:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 2px;
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+@media print {
+  .nav-controls,
+  .add-surah-btn {
+    display: none;
+  }
+
+  .surah-list-container {
+    background: white;
+    color: black;
+  }
+}
+
+
 @media (max-width: 480px) {
   .surah-list-title {
     font-size: 1.5rem;
   }
 
-  .add-surah-btn {
-  box-sizing: border-box;
-  max-width: 100%;
-}
+  .nav-controls {
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
 
-/* iPhone / small screens: remove side margins + reduce height */
-@media (max-width: 480px) {
+  .nav-btn {
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    font-size: var(--size-sm);
+  }
+
+  .logout-btn {
+    margin-left: 0;
+    width: 100%;
+  }
+
   .add-surah-btn {
-  width: auto;               /* don’t stretch full width */
-  padding: 7px 14px;         /* smaller */
-  font-size: 0.85rem;
-  border-radius: 8px;
+    width: auto;
+    padding: 7px 14px;
+    font-size: 0.85rem;
+    border-radius: 8px;
   }
 
   .add-icon {
-    font-size: 1.25rem;            /* optional: slightly smaller + icon */
+    font-size: 1rem;
     line-height: 1;
   }
-}
 
   .surahs-container {
     padding: var(--space-md);
+    max-width: 100%;
   }
 
   .juz-heading {
     font-size: 1.125rem;
+  }
+
+  .surah-card {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 10px var(--space-md);
+  }
+
+  .surah-content {
+    width: 100%;
+    margin-bottom: var(--space-sm);
+    gap: var(--space-md);
+  }
+
+  .surah-number {
+    min-width: 40px;
+    font-size: 1.25rem;
   }
 
   .surah-name {
@@ -919,6 +997,72 @@ button {
 
   .surah-meta {
     font-size: 0.75rem;
+  }
+
+  .check-btn {
+    width: 26px;
+    height: 26px;
+    min-width: 26px;
+    align-self: flex-end;
+    margin-left: auto;
+    margin-top: var(--space-xs);
+  }
+
+  .expand-btn {
+    width: 28px;
+    height: 28px;
+    margin-right: var(--space-md);
+  }
+
+  .subsections-container {
+    padding-left: var(--space-md);
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+    border-left-width: 1px;
+  }
+
+  .surah-card--subsection {
+    margin-left: 0;
+    padding: 10px var(--space-md);
+    border-left-width: 2px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .surah-card--subsection .surah-content {
+    flex-direction: row;
+    margin-bottom: 0;
+  }
+
+  .subsection-number {
+    font-size: 1rem;
+    min-width: 35px;
+  }
+
+  .surah-card--subsection .check-btn {
+    align-self: center;
+    margin-left: auto;
+    margin-top: 0;
+  }
+
+  .progress-card,
+  .weekly-progress-wrapper {
+    margin: var(--space-md);
+    padding: var(--space-md);
+  }
+
+  .surah-list-header {
+    padding: var(--space-md);
+  }
+
+  .weekly-table {
+    font-size: 0.75rem;
+  }
+
+  .weekly-table thead th,
+  .weekly-table tbody td {
+    padding: var(--space-sm);
   }
 }
 
