@@ -27,8 +27,20 @@ function SurahList() {
   const [maxMurajaahCount, setMaxMurajaahCount] = useState(0)
   const [savingMurajaahById, setSavingMurajaahById] = useState({})
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
+  const [expandedJuz, setExpandedJuz] = useState({})
   const [expandedParents, setExpandedParents] = useState({})
+  const [activeAudioId, setActiveAudioId] = useState(null)
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false)
+  const [isAudioRepeating, setIsAudioRepeating] = useState(false)
+  const [loadingAudioId, setLoadingAudioId] = useState(null)
+  const [audioError, setAudioError] = useState(null)
   const inFlightMurajaahRef = useRef({})
+  const audioRefs = useRef([null, null])
+  const activeAudioSlotRef = useRef(0)
+  const audioPlaylistRef = useRef([])
+  const currentAudioIndexRef = useRef(0)
+  const audioRequestRef = useRef(0)
+  const audioBySurahCacheRef = useRef(new Map())
 
   const navigate = useNavigate()
 
@@ -68,6 +80,235 @@ function SurahList() {
     const key = normalizeSurahId(id)
     return !!savingMurajaahById[key]
   }
+
+  const getSurahAudioRange = (surah, siblingSurahs = []) => {
+    const chapterNumber = Math.floor(Number(surah.parent_id || surah.id))
+    let verseStart = 1
+    let verseEnd = Number(surah.verse_memorized || 0)
+
+    if (!surah.parent_id && surah.subsections?.length > 0) {
+      const latestSubsection = surah.subsections[surah.subsections.length - 1]
+      verseEnd = Number(latestSubsection.verse_memorized || 0)
+    }
+
+    if (surah.parent_id) {
+      const subsectionIndex = siblingSurahs.findIndex(
+        (item) => normalizeSurahId(item.id) === normalizeSurahId(surah.id)
+      )
+
+      if (subsectionIndex > 0) {
+        verseStart = Number(siblingSurahs[subsectionIndex - 1].verse_memorized || 0) + 1
+      }
+    }
+
+    verseStart = Math.floor(verseStart)
+    verseEnd = Math.floor(verseEnd)
+
+    if (
+      !Number.isFinite(chapterNumber) ||
+      !Number.isFinite(verseStart) ||
+      !Number.isFinite(verseEnd) ||
+      chapterNumber < 1 ||
+      verseStart < 1 ||
+      verseEnd < verseStart
+    ) {
+      return null
+    }
+
+    return { chapterNumber, verseStart, verseEnd }
+  }
+
+  const fetchSurahAudioPlaylist = async ({ chapterNumber, verseStart, verseEnd }) => {
+    let ayahs = audioBySurahCacheRef.current.get(chapterNumber)
+
+    if (!ayahs) {
+      const response = await fetch(`https://staticquran.vercel.app/api/v1/surah/${chapterNumber}`)
+      if (!response.ok) throw new Error('Unable to fetch recitation audio')
+
+      const data = await response.json()
+      ayahs = data?.data?.ayah
+      if (!Array.isArray(ayahs)) throw new Error('Invalid recitation audio response')
+
+      audioBySurahCacheRef.current.set(chapterNumber, ayahs)
+    }
+
+    const playlist = ayahs
+      .filter((ayah) => {
+        const verseNumber = Number(ayah.sequence?.surah)
+        return verseNumber >= verseStart && verseNumber <= verseEnd
+      })
+      .map((ayah) => ayah.recitation?.audio)
+      .filter(Boolean)
+
+    if (playlist.length === 0) throw new Error('No recitation audio found for these verses')
+    return playlist
+  }
+
+  const clearAudioElement = (audio) => {
+    if (!audio) return
+    audio.pause()
+    audio.removeAttribute('src')
+    audio.load()
+  }
+
+  const preloadAudioElement = (audio, url) => {
+    if (!audio || !url) {
+      clearAudioElement(audio)
+      return
+    }
+
+    audio.src = url
+    audio.preload = 'auto'
+    audio.load()
+  }
+
+  const prepareAudioSlots = (playlist, startIndex = 0, activeSlot = 0) => {
+    activeAudioSlotRef.current = activeSlot
+    preloadAudioElement(audioRefs.current[activeSlot], playlist[startIndex])
+
+    const bufferedSlot = activeSlot === 0 ? 1 : 0
+    preloadAudioElement(audioRefs.current[bufferedSlot], playlist[startIndex + 1])
+  }
+
+  const handleSurahAudioToggle = async (surah, siblingSurahs = []) => {
+    const idKey = normalizeSurahId(surah.id)
+    const range = getSurahAudioRange(surah, siblingSurahs)
+    const activeAudio = audioRefs.current[activeAudioSlotRef.current]
+    if (!range || !activeAudio) return
+
+    if (activeAudioId === idKey && loadingAudioId !== idKey) {
+      if (isAudioPlaying) {
+        activeAudio.pause()
+        setIsAudioPlaying(false)
+        return
+      }
+
+      if (activeAudio.ended && audioPlaylistRef.current.length > 0) {
+        currentAudioIndexRef.current = 0
+        prepareAudioSlots(
+          audioPlaylistRef.current,
+          0,
+          activeAudioSlotRef.current
+        )
+      }
+
+      try {
+        await audioRefs.current[activeAudioSlotRef.current].play()
+        setIsAudioPlaying(true)
+        setAudioError(null)
+      } catch (error) {
+        console.error('Unable to resume Surah audio:', error)
+        setAudioError({ id: idKey, message: 'Unable to play audio. Try again.' })
+      }
+      return
+    }
+
+    const requestId = audioRequestRef.current + 1
+    audioRequestRef.current = requestId
+    audioRefs.current.forEach((audio) => audio?.pause())
+    setActiveAudioId(idKey)
+    setIsAudioPlaying(false)
+    setLoadingAudioId(idKey)
+    setAudioError(null)
+
+    try {
+      const playlist = await fetchSurahAudioPlaylist(range)
+      if (requestId !== audioRequestRef.current || !audioRefs.current[0]) return
+
+      audioPlaylistRef.current = playlist
+      currentAudioIndexRef.current = 0
+      prepareAudioSlots(playlist)
+      await audioRefs.current[0].play()
+
+      if (requestId === audioRequestRef.current) {
+        setIsAudioPlaying(true)
+      }
+    } catch (error) {
+      if (requestId !== audioRequestRef.current) return
+      console.error('Unable to play Surah audio:', error)
+      audioRefs.current.forEach(clearAudioElement)
+      audioPlaylistRef.current = []
+      currentAudioIndexRef.current = 0
+      setActiveAudioId(null)
+      setIsAudioPlaying(false)
+      setAudioError({ id: idKey, message: error.message || 'Unable to play audio. Try again.' })
+    } finally {
+      if (requestId === audioRequestRef.current) {
+        setLoadingAudioId(null)
+      }
+    }
+  }
+
+  const handleSurahAudioEnded = (endedSlot) => {
+    if (endedSlot !== activeAudioSlotRef.current) return
+
+    const nextIndex = currentAudioIndexRef.current + 1
+    if (nextIndex >= audioPlaylistRef.current.length) {
+      if (isAudioRepeating && audioPlaylistRef.current.length > 0) {
+        currentAudioIndexRef.current = 0
+        prepareAudioSlots(audioPlaylistRef.current, 0, endedSlot)
+
+        audioRefs.current[endedSlot].play().catch((error) => {
+          console.error('Unable to repeat Surah audio:', error)
+          setIsAudioPlaying(false)
+          setAudioError({
+            id: activeAudioId,
+            message: 'Unable to repeat this recitation.',
+          })
+        })
+      } else if (nextAudioSelection) {
+        handleSurahAudioToggle(
+          nextAudioSelection.surah,
+          nextAudioSelection.siblingSurahs
+        )
+      } else {
+        setIsAudioPlaying(false)
+      }
+      return
+    }
+
+    const nextSlot = endedSlot === 0 ? 1 : 0
+    const nextAudio = audioRefs.current[nextSlot]
+    if (!nextAudio) return
+
+    currentAudioIndexRef.current = nextIndex
+    activeAudioSlotRef.current = nextSlot
+
+    const playPromise = nextAudio.play()
+
+    // The element that just finished is immediately reused to buffer the
+    // following Ayah while the already-buffered next Ayah begins playback.
+    preloadAudioElement(
+      audioRefs.current[endedSlot],
+      audioPlaylistRef.current[nextIndex + 1]
+    )
+
+    playPromise.catch((error) => {
+      console.error('Unable to play the next Ayah:', error)
+      audioRefs.current.forEach(clearAudioElement)
+      audioPlaylistRef.current = []
+      currentAudioIndexRef.current = 0
+      setActiveAudioId(null)
+      setIsAudioPlaying(false)
+      setAudioError({
+        id: activeAudioId,
+        message: 'Audio stopped before the Surah range was complete.',
+      })
+    })
+  }
+
+  useEffect(() => {
+    const audioElements = [...audioRefs.current]
+
+    return () => {
+      audioRequestRef.current += 1
+      audioElements.forEach((audio) => {
+        if (!audio) return
+        audio.pause()
+        audio.removeAttribute('src')
+      })
+    }
+  }, [])
 
   useEffect(() => {
     if (!userId) return
@@ -184,6 +425,23 @@ function SurahList() {
     return groups
   }, [surahs])
 
+  const audioQueue = useMemo(
+    () =>
+      Object.keys(groupedSurahs)
+        .sort((a, b) => Number(a) - Number(b))
+        .flatMap((juz) =>
+          groupedSurahs[juz].flatMap((surah) =>
+            surah.subsections?.length > 0
+              ? surah.subsections.map((subsection) => ({
+                  surah: subsection,
+                  siblingSurahs: surah.subsections,
+                }))
+              : [{ surah, siblingSurahs: [] }]
+          )
+        ),
+    [groupedSurahs]
+  )
+
   const handleCheck = (id, event) => {
     event.stopPropagation()
     const idKey = normalizeSurahId(id)
@@ -247,8 +505,139 @@ function SurahList() {
     setIsLoginModalOpen(true)
   }
 
+  const renderAudioButton = (surah, siblingSurahs = []) => {
+    const idKey = normalizeSurahId(surah.id)
+    const range = getSurahAudioRange(surah, siblingSurahs)
+    const isActive = activeAudioId === idKey
+    const isLoading = loadingAudioId === idKey
+    const isPlaying = isActive && isAudioPlaying
+    const errorMessage = audioError?.id === idKey ? audioError.message : ''
+    const rangeLabel = range
+      ? `verses ${range.verseStart} to ${range.verseEnd}`
+      : 'the memorized verses'
+
+    const actionLabel = isLoading
+      ? `Loading ${surah.chapter_name} audio`
+      : isPlaying
+        ? `Pause ${surah.chapter_name}`
+        : `Play ${surah.chapter_name}, ${rangeLabel}`
+
+    return (
+      <button
+        type="button"
+        className={`surah-audio-btn ${isPlaying ? 'surah-audio-btn--playing' : ''} ${
+          errorMessage ? 'surah-audio-btn--error' : ''
+        }`}
+        onClick={(event) => {
+          event.stopPropagation()
+          handleSurahAudioToggle(surah, siblingSurahs)
+        }}
+        disabled={!range || isLoading}
+        aria-label={errorMessage ? `${errorMessage} Retry ${actionLabel}` : actionLabel}
+        aria-pressed={isPlaying}
+        title={errorMessage || actionLabel}
+      >
+        {isLoading ? (
+          <span className="surah-audio-spinner" aria-hidden="true" />
+        ) : isPlaying ? (
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="6" y="5" width="4" height="14" rx="1" />
+            <rect x="14" y="5" width="4" height="14" rx="1" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 5.5v13l10-6.5z" />
+          </svg>
+        )}
+      </button>
+    )
+  }
+
+  const activeAudioSelection = (() => {
+    if (!activeAudioId) return null
+
+    for (const juzSurahs of Object.values(groupedSurahs)) {
+      for (const surah of juzSurahs) {
+        if (normalizeSurahId(surah.id) === activeAudioId) {
+          return { surah, siblingSurahs: surah.subsections || [] }
+        }
+
+        const subsection = surah.subsections?.find(
+          (item) => normalizeSurahId(item.id) === activeAudioId
+        )
+        if (subsection) {
+          return { surah: subsection, siblingSurahs: surah.subsections }
+        }
+      }
+    }
+
+    return null
+  })()
+
+  const activeAudioSurah = activeAudioSelection?.surah
+  const activeAudioRange = activeAudioSurah
+    ? getSurahAudioRange(activeAudioSurah, activeAudioSelection.siblingSurahs)
+    : null
+  const activeAudioQueueIndex = audioQueue.findIndex(
+    ({ surah }) => normalizeSurahId(surah.id) === activeAudioId
+  )
+
+  let previousAudioSelection =
+    activeAudioQueueIndex > 0 ? audioQueue[activeAudioQueueIndex - 1] : null
+  let nextAudioSelection =
+    activeAudioQueueIndex >= 0 && activeAudioQueueIndex < audioQueue.length - 1
+      ? audioQueue[activeAudioQueueIndex + 1]
+      : null
+
+  // A parent with subsections is not duplicated in the automatic queue.
+  // When its combined audio is selected directly, navigation skips over
+  // those already-covered subsections.
+  if (activeAudioQueueIndex === -1 && activeAudioSurah?.subsections?.length > 0) {
+    const firstSubsectionId = normalizeSurahId(activeAudioSurah.subsections[0].id)
+    const lastSubsectionId = normalizeSurahId(
+      activeAudioSurah.subsections[activeAudioSurah.subsections.length - 1].id
+    )
+    const firstSubsectionIndex = audioQueue.findIndex(
+      ({ surah }) => normalizeSurahId(surah.id) === firstSubsectionId
+    )
+    const lastSubsectionIndex = audioQueue.findIndex(
+      ({ surah }) => normalizeSurahId(surah.id) === lastSubsectionId
+    )
+
+    previousAudioSelection =
+      firstSubsectionIndex > 0 ? audioQueue[firstSubsectionIndex - 1] : null
+    nextAudioSelection =
+      lastSubsectionIndex >= 0 && lastSubsectionIndex < audioQueue.length - 1
+        ? audioQueue[lastSubsectionIndex + 1]
+        : null
+  }
+
+  const isFloatingAudioLoading =
+    !!activeAudioId && loadingAudioId === activeAudioId
+  const floatingAudioStatus = isFloatingAudioLoading
+    ? 'Loading recitation'
+    : isAudioPlaying
+      ? 'Now playing'
+      : 'Paused'
+
   return (
-    <div className="surah-list-container">
+    <div
+      className={`surah-list-container ${
+        activeAudioSurah ? 'surah-list-container--audio-active' : ''
+      }`}
+    >
+      {[0, 1].map((slot) => (
+        <audio
+          key={slot}
+          ref={(element) => {
+            audioRefs.current[slot] = element
+          }}
+          className="surah-audio-element"
+          onEnded={() => handleSurahAudioEnded(slot)}
+          preload="auto"
+          crossOrigin="anonymous"
+        />
+      ))}
       <div className="surah-list-header">
         <h1 className="surah-list-title">
           Murajaah Tracker {auth?.user ? `— ${auth.user}` : ''}
@@ -371,10 +760,40 @@ function SurahList() {
       <div className="surahs-container">
         {Object.keys(groupedSurahs)
           .sort((a, b) => a - b)
-          .map((juz) => (
+          .map((juz) => {
+            const isJuzExpanded = !!expandedJuz[juz]
+            const surahListId = `juz-${juz}-surahs`
+
+            return (
             <section key={juz} className="juz-section">
-              <h2 className="juz-heading">Juz {juz}</h2>
-              <div className="surahs-grid">
+              <h2 className="juz-heading">
+                <button
+                  type="button"
+                  className="juz-toggle"
+                  onClick={() => {
+                    setExpandedJuz((prev) => ({
+                      ...prev,
+                      [juz]: !prev[juz],
+                    }))
+                  }}
+                  aria-expanded={isJuzExpanded}
+                  aria-controls={surahListId}
+                >
+                  <span>Juz {juz}</span>
+                  <svg
+                    className={`juz-chevron ${isJuzExpanded ? 'juz-chevron--open' : ''}`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    aria-hidden="true"
+                  >
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </button>
+              </h2>
+              {isJuzExpanded && (
+              <div id={surahListId} className="surahs-grid">
                 {groupedSurahs[juz].map((surah, index) => {
                   const isParent = surah.subsections && surah.subsections.length > 0
                   const isExpanded = expandedParents[surah.id]
@@ -460,27 +879,30 @@ function SurahList() {
                           </div>
                         </div>
 
-                        {!isParent && (
-                          <button
-                            className={`check-btn ${isSurahCheckedToday(surah.id) ? 'checked' : ''}`}
-                            onClick={(event) =>
-                              !isSurahCheckedToday(surah.id) &&
-                              !isMurajaahSaving(surah.id) &&
-                              handleCheck(surah.id, event)
-                            }
-                            disabled={isSurahCheckedToday(surah.id) || isMurajaahSaving(surah.id)}
-                          >
-                            {isSurahCheckedToday(surah.id) ? (
-                              <svg className="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                <polyline points="20 6 9 17 4 12"></polyline>
-                              </svg>
-                            ) : (
-                              <svg className="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                <polyline points="20 6 9 17 4 12"></polyline>
-                              </svg>
-                            )}
-                          </button>
-                        )}
+                        <div className="surah-actions">
+                          {renderAudioButton(surah, surah.subsections || [])}
+                          {!isParent && (
+                            <button
+                              className={`check-btn ${isSurahCheckedToday(surah.id) ? 'checked' : ''}`}
+                              onClick={(event) =>
+                                !isSurahCheckedToday(surah.id) &&
+                                !isMurajaahSaving(surah.id) &&
+                                handleCheck(surah.id, event)
+                              }
+                              disabled={isSurahCheckedToday(surah.id) || isMurajaahSaving(surah.id)}
+                            >
+                              {isSurahCheckedToday(surah.id) ? (
+                                <svg className="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                  <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                              ) : (
+                                <svg className="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                  <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {/* Subsections (expanded) */}
@@ -522,25 +944,28 @@ function SurahList() {
                                 </div>
                               </div>
 
-                              <button
-                                className={`check-btn ${isSurahCheckedToday(subsection.id) ? 'checked' : ''}`}
-                                onClick={(event) =>
-                                  !isSurahCheckedToday(subsection.id) &&
-                                  !isMurajaahSaving(subsection.id) &&
-                                  handleCheck(subsection.id, event)
-                                }
-                                disabled={isSurahCheckedToday(subsection.id) || isMurajaahSaving(subsection.id)}
-                              >
-                                {isSurahCheckedToday(subsection.id) ? (
-                                  <svg className="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                    <polyline points="20 6 9 17 4 12"></polyline>
-                                  </svg>
-                                ) : (
-                                  <svg className="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                    <polyline points="20 6 9 17 4 12"></polyline>
-                                  </svg>
-                                )}
-                              </button>
+                              <div className="surah-actions">
+                                {renderAudioButton(subsection, surah.subsections)}
+                                <button
+                                  className={`check-btn ${isSurahCheckedToday(subsection.id) ? 'checked' : ''}`}
+                                  onClick={(event) =>
+                                    !isSurahCheckedToday(subsection.id) &&
+                                    !isMurajaahSaving(subsection.id) &&
+                                    handleCheck(subsection.id, event)
+                                  }
+                                  disabled={isSurahCheckedToday(subsection.id) || isMurajaahSaving(subsection.id)}
+                                >
+                                  {isSurahCheckedToday(subsection.id) ? (
+                                    <svg className="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                      <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                  ) : (
+                                    <svg className="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                      <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                  )}
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -549,9 +974,164 @@ function SurahList() {
                   )
                 })}
               </div>
+              )}
             </section>
-          ))}
+            )
+          })}
       </div>
+
+      {activeAudioSurah && (
+        <aside
+          className="floating-audio-card"
+          aria-label="Current Quran recitation"
+          aria-live="polite"
+        >
+          <div
+            className={`floating-audio-artwork ${
+              isAudioPlaying ? 'floating-audio-artwork--playing' : ''
+            }`}
+            aria-hidden="true"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M5 9v6h4l5 4V5L9 9H5z" />
+              <path className="floating-audio-wave" d="M17 9.5a4 4 0 0 1 0 5" />
+              <path className="floating-audio-wave" d="M19.5 7a7 7 0 0 1 0 10" />
+            </svg>
+          </div>
+
+          <div className="floating-audio-info">
+            <span className="floating-audio-status">
+              <span
+                className={`floating-audio-status-dot ${
+                  isAudioPlaying ? 'floating-audio-status-dot--playing' : ''
+                }`}
+                aria-hidden="true"
+              />
+              {floatingAudioStatus}
+            </span>
+            <strong className="floating-audio-title">{activeAudioSurah.chapter_name}</strong>
+            {activeAudioRange && (
+              <span className="floating-audio-range">
+                Verses {activeAudioRange.verseStart}–{activeAudioRange.verseEnd}
+              </span>
+            )}
+          </div>
+
+          <div className="floating-audio-controls">
+            <button
+              type="button"
+              className="floating-audio-skip"
+              onClick={() =>
+                previousAudioSelection &&
+                handleSurahAudioToggle(
+                  previousAudioSelection.surah,
+                  previousAudioSelection.siblingSurahs
+                )
+              }
+              disabled={!previousAudioSelection || isFloatingAudioLoading}
+              aria-label={
+                previousAudioSelection
+                  ? `Play previous: ${previousAudioSelection.surah.chapter_name}`
+                  : 'No previous Surah'
+              }
+              title="Previous"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="5" y="5" width="2" height="14" rx="1" />
+                <path d="M19 5.5v13L8.5 12z" />
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              className={`floating-audio-toggle ${
+                isAudioPlaying ? 'floating-audio-toggle--playing' : ''
+              }`}
+              onClick={() =>
+                handleSurahAudioToggle(
+                  activeAudioSurah,
+                  activeAudioSelection.siblingSurahs
+                )
+              }
+              disabled={isFloatingAudioLoading}
+              aria-label={
+                isFloatingAudioLoading
+                  ? `Loading ${activeAudioSurah.chapter_name} audio`
+                  : isAudioPlaying
+                    ? `Pause ${activeAudioSurah.chapter_name}`
+                    : `Play ${activeAudioSurah.chapter_name}`
+              }
+            >
+              {isFloatingAudioLoading ? (
+                <span className="floating-audio-spinner" aria-hidden="true" />
+              ) : isAudioPlaying ? (
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="6" y="5" width="4" height="14" rx="1" />
+                  <rect x="14" y="5" width="4" height="14" rx="1" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M8 5.5v13l10-6.5z" />
+                </svg>
+              )}
+            </button>
+
+            <button
+              type="button"
+              className="floating-audio-skip"
+              onClick={() =>
+                nextAudioSelection &&
+                handleSurahAudioToggle(
+                  nextAudioSelection.surah,
+                  nextAudioSelection.siblingSurahs
+                )
+              }
+              disabled={!nextAudioSelection || isFloatingAudioLoading}
+              aria-label={
+                nextAudioSelection
+                  ? `Play next: ${nextAudioSelection.surah.chapter_name}`
+                  : 'No next Surah'
+              }
+              title="Next"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 5.5v13L15.5 12z" />
+                <rect x="17" y="5" width="2" height="14" rx="1" />
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              className={`floating-audio-skip floating-audio-repeat ${
+                isAudioRepeating ? 'floating-audio-repeat--active' : ''
+              }`}
+              onClick={() => setIsAudioRepeating((repeating) => !repeating)}
+              aria-label={
+                isAudioRepeating
+                  ? 'Turn off repeat for the current Surah'
+                  : 'Repeat the current Surah continuously'
+              }
+              aria-pressed={isAudioRepeating}
+              title={isAudioRepeating ? 'Repeat on' : 'Repeat off'}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M17 2l4 4-4 4" />
+                <path d="M3 11V9a3 3 0 0 1 3-3h18" />
+                <path d="M7 22l-4-4 4-4" />
+                <path d="M21 13v2a3 3 0 0 1-3 3H3" />
+              </svg>
+            </button>
+          </div>
+        </aside>
+      )}
     </div>
   )
 }

@@ -473,14 +473,28 @@ button {
   font-weight: 700;
   color: var(--color-text-primary);
   margin-bottom: var(--space-lg);
-  padding-bottom: var(--space-md);
-  border-bottom: 2px solid var(--color-accent-primary);
   letter-spacing: -0.3px;
   position: relative;
-  display: inline-block;
+  display: block;
 }
 
-.juz-heading::after {
+.juz-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md) var(--space-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  border-bottom: 2px solid var(--color-accent-primary);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  position: relative;
+}
+
+.juz-toggle::after {
   content: '';
   position: absolute;
   bottom: -2px;
@@ -493,6 +507,22 @@ button {
     transparent
   );
   animation: expandWidth 0.8s var(--transition-smooth);
+}
+
+.juz-toggle:hover {
+  background-color: rgba(111, 165, 153, 0.08);
+  color: var(--color-accent-secondary);
+}
+
+.juz-chevron {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  transition: transform var(--transition-smooth);
+}
+
+.juz-chevron--open {
+  transform: rotate(180deg);
 }
 
 @keyframes expandWidth {
@@ -737,6 +767,314 @@ button {
 }
 
 /* ============================================
+   SURAH AUDIO CONTROLS
+   ============================================ */
+.surah-audio-element {
+  display: none;
+}
+
+.surah-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+  margin-left: var(--space-md);
+}
+
+.surah-audio-btn {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-accent-secondary);
+  background-color: rgba(111, 165, 153, 0.1);
+  border: 1.5px solid var(--color-accent-primary);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.surah-audio-btn:hover:not(:disabled) {
+  color: white;
+  background-color: var(--color-accent-secondary);
+  border-color: var(--color-accent-secondary);
+  box-shadow: 0 0 12px rgba(111, 165, 153, 0.3);
+  transform: scale(1.05);
+}
+
+.surah-audio-btn--playing {
+  color: white;
+  background-color: var(--color-accent-secondary);
+  border-color: var(--color-accent-secondary);
+  box-shadow: 0 0 12px rgba(111, 165, 153, 0.3);
+}
+
+.surah-audio-btn--error {
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+.surah-audio-btn:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.surah-audio-btn svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+}
+
+.surah-audio-spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(58, 138, 125, 0.25);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: surahAudioSpin 0.7s linear infinite;
+}
+
+@keyframes surahAudioSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.surah-list-container--audio-active .surahs-container {
+  padding-bottom: calc(var(--space-xl) + 100px);
+}
+
+.floating-audio-card {
+  position: fixed;
+  left: 50%;
+  bottom: var(--space-lg);
+  z-index: 100;
+  width: min(560px, calc(100% - 32px));
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-md);
+  padding: 12px 14px;
+  color: var(--color-text-primary);
+  background: rgba(253, 252, 251, 0.94);
+  border: 1px solid rgba(111, 165, 153, 0.45);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 36px rgba(44, 62, 58, 0.2);
+  backdrop-filter: blur(14px);
+  transform: translateX(-50%);
+  animation: floatingAudioEnter 0.25s var(--transition-smooth);
+}
+
+@keyframes floatingAudioEnter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 16px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.floating-audio-artwork {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-accent-secondary);
+  background: linear-gradient(
+    135deg,
+    rgba(111, 165, 153, 0.18),
+    rgba(58, 138, 125, 0.08)
+  );
+  border: 1px solid rgba(111, 165, 153, 0.3);
+  border-radius: 50%;
+}
+
+.floating-audio-artwork svg {
+  width: 25px;
+  height: 25px;
+}
+
+.floating-audio-artwork--playing .floating-audio-wave {
+  animation: floatingAudioWave 1s ease-in-out infinite alternate;
+  transform-origin: center;
+}
+
+.floating-audio-artwork--playing .floating-audio-wave:last-child {
+  animation-delay: 0.18s;
+}
+
+@keyframes floatingAudioWave {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.floating-audio-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.floating-audio-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.floating-audio-status-dot {
+  width: 7px;
+  height: 7px;
+  background-color: var(--color-text-muted);
+  border-radius: 50%;
+}
+
+.floating-audio-status-dot--playing {
+  background-color: var(--color-accent-secondary);
+  box-shadow: 0 0 0 4px rgba(58, 138, 125, 0.12);
+}
+
+.floating-audio-title {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-family: var(--font-serif);
+  font-size: var(--size-base);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.floating-audio-range {
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+}
+
+.floating-audio-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.floating-audio-skip {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-accent-secondary);
+  background-color: rgba(111, 165, 153, 0.1);
+  border: 1px solid rgba(111, 165, 153, 0.35);
+  border-radius: 50%;
+}
+
+.floating-audio-skip:hover:not(:disabled) {
+  color: white;
+  background-color: var(--color-accent-secondary);
+  border-color: var(--color-accent-secondary);
+  transform: scale(1.05);
+}
+
+.floating-audio-skip:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.floating-audio-skip svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+}
+
+.floating-audio-repeat {
+  color: #3a8a7d;
+  background-color: #eff7f5;
+  border-color: #c4ddd8;
+}
+
+.floating-audio-repeat:not(.floating-audio-repeat--active):hover:not(:disabled) {
+  color: #31766c;
+  background-color: #e3f1ed;
+  border-color: #a9cec7;
+}
+
+.floating-audio-repeat svg {
+  fill: none;
+  stroke: currentColor;
+}
+
+.floating-audio-repeat--active {
+  color: white;
+  background-color: #3a8a7d;
+  border-color: #3a8a7d;
+  box-shadow: 0 5px 14px rgba(58, 138, 125, 0.28);
+}
+
+.floating-audio-repeat--active:hover:not(:disabled) {
+  color: white;
+  background-color: #31766c;
+  border-color: #31766c;
+}
+
+.floating-audio-toggle {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  background: linear-gradient(
+    135deg,
+    var(--color-accent-primary),
+    var(--color-accent-secondary)
+  );
+  border-radius: 50%;
+  box-shadow: 0 5px 14px rgba(58, 138, 125, 0.28);
+}
+
+.floating-audio-toggle:hover:not(:disabled) {
+  box-shadow: 0 7px 18px rgba(58, 138, 125, 0.38);
+  transform: scale(1.05);
+}
+
+.floating-audio-toggle:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.floating-audio-toggle svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+
+.floating-audio-spinner {
+  width: 19px;
+  height: 19px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: surahAudioSpin 0.7s linear infinite;
+}
+
+/* ============================================
    CHECK BUTTON
    ============================================ */
 .check-btn {
@@ -854,6 +1192,17 @@ button {
     margin-bottom: var(--space-md);
   }
 
+  .surah-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+
+  .surah-actions .check-btn {
+    align-self: center;
+    margin-left: 0;
+  }
+
   .subsections-container {
     padding-left: var(--space-md);
     gap: var(--space-sm);
@@ -933,6 +1282,38 @@ button:focus-visible {
 
 
 @media (max-width: 480px) {
+  .floating-audio-card {
+    bottom: 10px;
+    width: calc(100% - 20px);
+    gap: 10px;
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .floating-audio-artwork {
+    width: 42px;
+    height: 42px;
+  }
+
+  .floating-audio-artwork svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .floating-audio-title {
+    font-size: 0.9rem;
+  }
+
+  .floating-audio-status {
+    font-size: 0.62rem;
+  }
+
+  .floating-audio-toggle {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+  }
+
   .surah-list-title {
     font-size: 1.5rem;
   }
