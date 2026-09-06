@@ -169,7 +169,7 @@ class GoogleCalendarService {
 
       const existingEventId = await this.findExistingEventForDate(eventDate, userId, 'sabaq')
       const event = {
-        summary: `Sabaq - ${sabaqRecords.length} portion(s)`,
+        summary: `✅Sabaq - ${sabaqRecords.length} portion(s)`,
         description: this.buildSabaqEventDescription(sabaqRecords),
         start: { date: eventDate },
         end: { date: moment(eventDate).add(1, 'day').format('YYYY-MM-DD') },
@@ -201,7 +201,7 @@ class GoogleCalendarService {
       const existingEventId = await this.findExistingEventForDate(eventDate, userId, 'tilawah')
       const currentPage = Number(tilawahDetails.currentPage) || 1
       const event = {
-        summary: `Tilawah - Page ${currentPage} / 604`,
+        summary: `✅Tilawah - Page ${currentPage} / 604`,
         description: this.buildTilawahEventDescription(tilawahDetails),
         start: { date: eventDate },
         end: { date: moment(eventDate).add(1, 'day').format('YYYY-MM-DD') },
