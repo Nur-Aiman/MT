@@ -214,14 +214,15 @@ router.post('/addmurajaah', async (req, res) => {
         [normalizedSurahId, user_id]
       )
 
-      // Sync with Google Calendar (if enabled)
+      await client.query('COMMIT')
+
+      // Sync only after the Murajaah transaction is safely committed.
       try {
         await syncMurajaahWithGoogleCalendar(client, user_id, currentDate, surahIds)
       } catch (calError) {
         console.warn('⚠️ Warning: Google Calendar sync failed (non-critical):', calError.message)
       }
 
-      await client.query('COMMIT')
       return res.status(201).json({ message: 'Inserted Successfully', already_marked: false })
     }
 
@@ -305,7 +306,7 @@ async function syncMurajaahWithGoogleCalendar(client, userId, eventDate, surahId
     )
 
     // Store or update calendar event ID in database
-    await storeCalendarEventId(client, userId, eventDate, calendarResult.eventId)
+    await storeCalendarEventId(client, userId, eventDate, calendarResult.eventId, 'murajaah')
 
     console.log('✅ Google Calendar sync successful:', calendarResult)
     return calendarResult
@@ -318,20 +319,63 @@ async function syncMurajaahWithGoogleCalendar(client, userId, eventDate, surahId
 /**
  * Helper function to store or update calendar event ID
  */
-async function storeCalendarEventId(client, userId, eventDate, eventId) {
+async function storeCalendarEventId(client, userId, eventDate, eventId, eventType) {
   try {
     // Use ON CONFLICT to handle both insert and update in one query
     await client.query(
-      `INSERT INTO calendar_events (user_id, event_date, google_event_id, calendar_name)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (user_id, event_date) 
-       DO UPDATE SET google_event_id = $3, updated_at = CURRENT_TIMESTAMP`,
-      [userId, eventDate, eventId, process.env.GOOGLE_CALENDAR_NAME || 'qk79io4u5ku7apiok8btsajc5k@group.calendar.google.com']
+      `INSERT INTO calendar_events (user_id, event_date, event_type, google_event_id, calendar_name)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (user_id, event_date, event_type)
+       DO UPDATE SET
+         google_event_id = EXCLUDED.google_event_id,
+         calendar_name = EXCLUDED.calendar_name,
+         updated_at = CURRENT_TIMESTAMP`,
+      [
+        userId,
+        eventDate,
+        eventType,
+        eventId,
+        process.env.GOOGLE_CALENDAR_NAME || 'qk79io4u5ku7apiok8btsajc5k@group.calendar.google.com',
+      ]
     )
   } catch (error) {
     console.error('❌ Error storing calendar event ID:', error)
     throw error
   }
+}
+
+async function syncSabaqWithGoogleCalendar(userId, eventDate) {
+  if (!process.env.GOOGLE_CREDENTIALS) {
+    console.log('Google Calendar not configured; skipping Sabaq sync')
+    return
+  }
+
+  const recordsResult = await pool.query(
+    `SELECT
+       chapter_number,
+       chapter_name,
+       page,
+       section,
+       verse,
+       number_of_readings,
+       complete_memorization,
+       murajaah_20_times
+     FROM sabaq_tracker
+     WHERE user_id = $1 AND date = $2::date
+     ORDER BY id ASC`,
+    [userId, eventDate]
+  )
+
+  if (recordsResult.rows.length === 0) return
+
+  const calendarResult = await googleCalendar.createOrUpdateSabaqEvent(
+    userId,
+    eventDate,
+    recordsResult.rows
+  )
+
+  await storeCalendarEventId(pool, userId, eventDate, calendarResult.eventId, 'sabaq')
+  console.log('Google Calendar Sabaq sync successful:', calendarResult)
 }
 
 
@@ -464,7 +508,7 @@ router.get('/getweeklymurajaahprogress', (req, res) => {
 
 // @desc Add New Sabaq Record
 // @route POST /murajaah/sabaqtracker/add
-router.post('/sabaqtracker/add', (req, res) => {
+router.post('/sabaqtracker/add', async (req, res) => {
   const user_id = getUserId(req)
   if (!user_id) return res.status(400).json({ message: 'user_id is required' })
 
@@ -483,68 +527,66 @@ router.post('/sabaqtracker/add', (req, res) => {
   // Convert chapter_number to numeric for decimal support (e.g., 2.0, 2.1)
   const numericChapterNumber = parseFloat(chapter_number)
 
-  // include user_id in matching condition
-  pool.query(
-    `SELECT * FROM sabaq_tracker
-     WHERE user_id = $1 AND date = $2
-       AND chapter_number = $3::numeric AND chapter_name = $4
-       AND page = $5 AND section = $6 AND verse = $7`,
-    [user_id, currentDate, numericChapterNumber, chapter_name, page, section, verse],
-    async (err, result) => {
-      if (err) {
-        console.error(err)
-        return res.status(500).json({ message: 'Server Error' })
-      }
+  try {
+    const result = await pool.query(
+      `SELECT * FROM sabaq_tracker
+       WHERE user_id = $1 AND date = $2
+         AND chapter_number = $3::numeric AND chapter_name = $4
+         AND page = $5 AND section = $6 AND verse = $7`,
+      [user_id, currentDate, numericChapterNumber, chapter_name, page, section, verse]
+    )
 
-      if (result.rows.length > 0) {
-        pool.query(
-          'UPDATE sabaq_tracker SET number_of_readings = $1, complete_memorization = $2, murajaah_20_times = $3 WHERE id = $4 AND user_id = $5',
-          [number_of_readings, complete_memorization, murajaah_20_times, result.rows[0].id, user_id],
-          (err) => {
-            if (err) {
-              console.error(err)
-              return res.status(500).json({ message: 'Server Error' })
-            }
-            res.status(200).json({ message: 'Updated Successfully' })
-          }
+    let status
+    let message
+    if (result.rows.length > 0) {
+      await pool.query(
+        'UPDATE sabaq_tracker SET number_of_readings = $1, complete_memorization = $2, murajaah_20_times = $3 WHERE id = $4 AND user_id = $5',
+        [number_of_readings, complete_memorization, murajaah_20_times, result.rows[0].id, user_id]
+      )
+      status = 200
+      message = 'Updated Successfully'
+    } else {
+      // Reset sequence to ensure ID doesn't duplicate
+      await pool.query(`
+        SELECT setval(
+          'sabaq_tracker_id_seq',
+          COALESCE((SELECT MAX(id) FROM sabaq_tracker), 0) + 1,
+          false
         )
-      } else {
-        // Reset sequence to ensure ID doesn't duplicate
-        await pool.query(`
-          SELECT setval(
-            'sabaq_tracker_id_seq',
-            COALESCE((SELECT MAX(id) FROM sabaq_tracker), 0) + 1,
-            false
-          )
-        `)
+      `)
 
-        pool.query(
-          `INSERT INTO sabaq_tracker
-            (date, chapter_number, chapter_name, page, section, verse, number_of_readings, complete_memorization, murajaah_20_times, user_id)
-           VALUES ($1, $2::numeric, $3, $4, $5, $6, $7, $8, $9, $10)`,
-          [
-            currentDate,
-            numericChapterNumber,
-            chapter_name,
-            page,
-            section,
-            verse,
-            number_of_readings,
-            complete_memorization,
-            murajaah_20_times,
-            user_id,
-          ],
-          (err) => {
-            if (err) {
-              console.error(err)
-              return res.status(500).json({ message: 'Server Error' })
-            }
-            res.status(201).json({ message: 'Inserted Successfully' })
-          }
-        )
-      }
+      await pool.query(
+        `INSERT INTO sabaq_tracker
+          (date, chapter_number, chapter_name, page, section, verse, number_of_readings, complete_memorization, murajaah_20_times, user_id)
+         VALUES ($1, $2::numeric, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          currentDate,
+          numericChapterNumber,
+          chapter_name,
+          page,
+          section,
+          verse,
+          number_of_readings,
+          complete_memorization,
+          murajaah_20_times,
+          user_id,
+        ]
+      )
+      status = 201
+      message = 'Inserted Successfully'
     }
-  )
+
+    try {
+      await syncSabaqWithGoogleCalendar(user_id, currentDate)
+    } catch (calError) {
+      console.warn('Warning: Google Calendar Sabaq sync failed (non-critical):', calError.message)
+    }
+
+    res.status(status).json({ message })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Server Error' })
+  }
 })
 
 // @desc Get Latest Sabaq Info

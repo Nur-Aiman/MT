@@ -98,7 +98,7 @@ class GoogleCalendarService {
       if (!this.initialized) await this.initialize()
 
       // Check if event already exists for this date
-      const existingEventId = await this.findExistingEventForDate(eventDate)
+      const existingEventId = await this.findExistingEventForDate(eventDate, userId, 'murajaah')
 
       // Build event description
       const description = this.buildEventDescription(surahDetails)
@@ -124,6 +124,7 @@ class GoogleCalendarService {
         extendedProperties: {
           private: {
             userId: String(userId),
+            eventType: 'murajaah',
             surahIds: surahIds.join(','),
             murajaahType: 'daily_revision',
           },
@@ -160,28 +161,126 @@ class GoogleCalendarService {
   }
 
   /**
+   * Create or update the user's daily Sabaq event.
+   */
+  async createOrUpdateSabaqEvent(userId, eventDate, sabaqRecords) {
+    try {
+      if (!this.initialized) await this.initialize()
+
+      const existingEventId = await this.findExistingEventForDate(eventDate, userId, 'sabaq')
+      const event = {
+        summary: `Sabaq - ${sabaqRecords.length} portion(s)`,
+        description: this.buildSabaqEventDescription(sabaqRecords),
+        start: { date: eventDate },
+        end: { date: moment(eventDate).add(1, 'day').format('YYYY-MM-DD') },
+        transparency: 'transparent',
+        visibility: 'private',
+        extendedProperties: {
+          private: {
+            userId: String(userId),
+            eventType: 'sabaq',
+            recordCount: String(sabaqRecords.length),
+          },
+        },
+      }
+
+      return this.upsertDailyEvent(existingEventId, event, eventDate)
+    } catch (error) {
+      console.error('Error creating/updating Sabaq calendar event:', error.message)
+      throw error
+    }
+  }
+
+  /**
+   * Create or update the user's daily Tilawah event.
+   */
+  async createOrUpdateTilawahEvent(userId, eventDate, tilawahDetails) {
+    try {
+      if (!this.initialized) await this.initialize()
+
+      const existingEventId = await this.findExistingEventForDate(eventDate, userId, 'tilawah')
+      const currentPage = Number(tilawahDetails.currentPage) || 1
+      const event = {
+        summary: `Tilawah - Page ${currentPage} / 604`,
+        description: this.buildTilawahEventDescription(tilawahDetails),
+        start: { date: eventDate },
+        end: { date: moment(eventDate).add(1, 'day').format('YYYY-MM-DD') },
+        transparency: 'transparent',
+        visibility: 'private',
+        extendedProperties: {
+          private: {
+            userId: String(userId),
+            eventType: 'tilawah',
+            currentPage: String(currentPage),
+          },
+        },
+      }
+
+      return this.upsertDailyEvent(existingEventId, event, eventDate)
+    } catch (error) {
+      console.error('Error creating/updating Tilawah calendar event:', error.message)
+      throw error
+    }
+  }
+
+  async upsertDailyEvent(existingEventId, event, eventDate) {
+    let result
+    if (existingEventId) {
+      result = await this.calendar.events.update({
+        calendarId: this.calendarId,
+        eventId: existingEventId,
+        requestBody: event,
+      })
+      console.log(`Calendar event updated: ${existingEventId}`)
+    } else {
+      result = await this.calendar.events.insert({
+        calendarId: this.calendarId,
+        requestBody: event,
+      })
+      console.log(`Calendar event created: ${result.data.id}`)
+    }
+
+    return {
+      eventId: result.data.id,
+      eventLink: result.data.htmlLink,
+      eventDate,
+    }
+  }
+
+  /**
    * Find existing event for a specific date
    */
-  async findExistingEventForDate(eventDate) {
+  async findExistingEventForDate(eventDate, userId, eventType) {
     try {
-      const response = await this.calendar.events.list({
-        calendarId: this.calendarId,
-        timeMin: moment(eventDate).startOf('day').toISOString(),
-        timeMax: moment(eventDate).endOf('day').toISOString(),
-        q: 'Murajaah',
-      })
+      const timeMin = moment.tz(eventDate, 'Asia/Kuala_Lumpur').startOf('day').toISOString()
+      const timeMax = moment.tz(eventDate, 'Asia/Kuala_Lumpur').endOf('day').toISOString()
+      const propertyQueries = [
+        [`userId=${userId}`, `eventType=${eventType}`],
+      ]
 
-      if (response.data.items && response.data.items.length > 0) {
-        const murajaahEvent = response.data.items.find((event) =>
-          event.summary.includes('Murajaah')
-        )
-        return murajaahEvent ? murajaahEvent.id : null
+      // Events created by the original Murajaah integration did not have eventType.
+      if (eventType === 'murajaah') {
+        propertyQueries.push([`userId=${userId}`, 'murajaahType=daily_revision'])
+      }
+
+      for (const privateExtendedProperty of propertyQueries) {
+        const response = await this.calendar.events.list({
+          calendarId: this.calendarId,
+          timeMin,
+          timeMax,
+          singleEvents: true,
+          privateExtendedProperty,
+        })
+
+        if (response.data.items && response.data.items.length > 0) {
+          return response.data.items[0].id
+        }
       }
 
       return null
     } catch (error) {
       console.error('❌ Error finding existing event:', error.message)
-      return null
+      throw error
     }
   }
 
@@ -232,6 +331,52 @@ class GoogleCalendarService {
     description += `Total Verses: ${totalVerses}\n`
 
     return description
+  }
+
+  buildSabaqEventDescription(sabaqRecords) {
+    if (!Array.isArray(sabaqRecords) || sabaqRecords.length === 0) {
+      return 'Sabaq memorization activity completed.'
+    }
+
+    let description = 'Sabaq:\n'
+    sabaqRecords.forEach((record, index) => {
+      description += `\n${index + 1}. Surah ${record.chapter_number} - ${record.chapter_name}\n`
+      description += `Page: ${record.page || '-'}\n`
+      description += `Section(s): ${record.section || '-'}\n`
+      description += `Verses: ${record.verse || '-'}\n`
+      description += `Readings: ${Number(record.number_of_readings) || 0}\n`
+      description += `Memorization complete: ${record.complete_memorization ? 'Yes' : 'No'}\n`
+      description += `Murajaah repetitions: ${Number(record.murajaah_20_times) || 0} / 20\n`
+    })
+
+    return description.trim()
+  }
+
+  buildTilawahEventDescription(tilawahDetails) {
+    const currentPage = Number(tilawahDetails.currentPage) || 1
+    const previousPage = Number(tilawahDetails.previousPage) || 1
+    const pagesProgressed = Math.max(0, currentPage - previousPage)
+    const goalLabels = {
+      once_month: 'Once a month',
+      once_two_months: 'Every two months',
+      free: 'Free pace',
+    }
+
+    let description = 'Tilawah:\n'
+    description += `Current page: ${currentPage} / 604\n`
+    description += `Starting page for the day: ${previousPage}\n`
+    description += `Pages progressed today: ${pagesProgressed}\n`
+    description += `Khatam goal: ${goalLabels[tilawahDetails.goalType] || 'Not set'}\n`
+
+    if (Array.isArray(tilawahDetails.updates) && tilawahDetails.updates.length > 0) {
+      description += '\nUpdates today:\n'
+      tilawahDetails.updates.forEach((update) => {
+        const time = moment(update.update_time).tz('Asia/Kuala_Lumpur').format('HH:mm')
+        description += `- Page ${update.page_number} at ${time}\n`
+      })
+    }
+
+    return description.trim()
   }
   /**
    * Delete a calendar event

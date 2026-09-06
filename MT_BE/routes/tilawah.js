@@ -1,7 +1,8 @@
 const express = require('express')
 const router = express.Router()
-const pool = require('../config/database')
+const { pool } = require('../config/database')
 const moment = require('moment-timezone')
+const googleCalendar = require('../config/googleCalendar')
 
 const TOTAL_PAGES_IN_QURAN = 604 // Standard Mushaf Madinah
 const TIMEZONE = 'Asia/Kuala_Lumpur'
@@ -66,60 +67,72 @@ router.get('/status', async (req, res) => {
  * Update last page recited
  */
 router.post('/update', async (req, res) => {
+  let client
   try {
     const userId = req.headers['x-user-id']
     if (!userId) return res.status(400).json({ error: 'User ID required' })
 
     const { page_number } = req.body
-    if (!page_number || page_number < 1 || page_number > TOTAL_PAGES_IN_QURAN) {
+    const normalizedPageNumber = Number(page_number)
+    if (
+      !Number.isInteger(normalizedPageNumber) ||
+      normalizedPageNumber < 1 ||
+      normalizedPageNumber > TOTAL_PAGES_IN_QURAN
+    ) {
       return res.status(400).json({ error: `Page must be between 1 and ${TOTAL_PAGES_IN_QURAN}` })
     }
 
     const updateDate = moment.tz(TIMEZONE).format('YYYY-MM-DD')
     const updateTime = moment.tz(TIMEZONE).toISOString()
 
-    // Reset sequence before insert
-    await pool.query(`
-      SELECT setval(
-        'tilawah_update_log_id_seq',
-        COALESCE((SELECT MAX(id) FROM tilawah_update_log), 0) + 1,
-        false
-      )
-    `)
-
-    // Begin transaction
-    await pool.query('BEGIN')
+    client = await pool.connect()
+    await client.query('BEGIN')
 
     try {
-      // Update tilawah_tracker
-      await pool.query(
-        `UPDATE tilawah_tracker 
-        SET last_page_recited = $1, last_update_date = $2, last_update_time = $3
-        WHERE user_id = $4`,
-        [page_number, updateDate, updateTime, userId]
+      // Keep tracker initialization and updates safe even if /status was never called.
+      await client.query(
+        `INSERT INTO tilawah_tracker
+          (user_id, last_page_recited, last_update_date, last_update_time)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (user_id)
+         DO UPDATE SET
+           last_page_recited = EXCLUDED.last_page_recited,
+           last_update_date = EXCLUDED.last_update_date,
+           last_update_time = EXCLUDED.last_update_time`,
+        [userId, normalizedPageNumber, updateDate, updateTime]
       )
 
       // Insert log
-      await pool.query(
+      await client.query(
         `INSERT INTO tilawah_update_log (user_id, page_number, update_date, update_time)
         VALUES ($1, $2, $3, $4)`,
-        [userId, page_number, updateDate, updateTime]
+        [userId, normalizedPageNumber, updateDate, updateTime]
       )
 
-      await pool.query('COMMIT')
-
-      res.json({
-        success: true,
-        page_number,
-        update_date: updateDate,
-        update_time: updateTime,
-        message: 'Page updated successfully'
-      })
+      await client.query('COMMIT')
     } catch (innerError) {
-      await pool.query('ROLLBACK')
+      await client.query('ROLLBACK')
       throw innerError
+    } finally {
+      client.release()
+      client = null
     }
+
+    try {
+      await syncTilawahWithGoogleCalendar(userId, updateDate)
+    } catch (calError) {
+      console.warn('Warning: Google Calendar Tilawah sync failed (non-critical):', calError.message)
+    }
+
+    res.json({
+      success: true,
+      page_number: normalizedPageNumber,
+      update_date: updateDate,
+      update_time: updateTime,
+      message: 'Page updated successfully'
+    })
   } catch (error) {
+    if (client) client.release()
     console.error('Error updating tilawah:', error)
     res.status(500).json({ error: 'Failed to update page' })
   }
@@ -322,5 +335,74 @@ router.get('/khatam-info', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch khatam info' })
   }
 })
+
+async function syncTilawahWithGoogleCalendar(userId, eventDate) {
+  if (!process.env.GOOGLE_CREDENTIALS) {
+    console.log('Google Calendar not configured; skipping Tilawah sync')
+    return
+  }
+
+  const [trackerResult, updatesResult, previousResult] = await Promise.all([
+    pool.query(
+      `SELECT t.last_page_recited, kg.goal_type
+       FROM tilawah_tracker t
+       LEFT JOIN khatam_goal kg ON kg.user_id = t.user_id
+       WHERE t.user_id = $1`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT page_number, update_time
+       FROM tilawah_update_log
+       WHERE user_id = $1 AND update_date = $2::date
+       ORDER BY update_time ASC`,
+      [userId, eventDate]
+    ),
+    pool.query(
+      `SELECT page_number
+       FROM tilawah_update_log
+       WHERE user_id = $1 AND update_date < $2::date
+       ORDER BY update_time DESC
+       LIMIT 1`,
+      [userId, eventDate]
+    ),
+  ])
+
+  if (trackerResult.rows.length === 0) return
+
+  const tracker = trackerResult.rows[0]
+  const previousPage = previousResult.rows[0]?.page_number || 1
+  const calendarResult = await googleCalendar.createOrUpdateTilawahEvent(
+    userId,
+    eventDate,
+    {
+      currentPage: tracker.last_page_recited,
+      previousPage,
+      goalType: tracker.goal_type,
+      updates: updatesResult.rows,
+    }
+  )
+
+  await storeCalendarEventId(userId, eventDate, calendarResult.eventId, 'tilawah')
+  console.log('Google Calendar Tilawah sync successful:', calendarResult)
+}
+
+async function storeCalendarEventId(userId, eventDate, eventId, eventType) {
+  await pool.query(
+    `INSERT INTO calendar_events (user_id, event_date, event_type, google_event_id, calendar_name)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (user_id, event_date, event_type)
+     DO UPDATE SET
+       google_event_id = EXCLUDED.google_event_id,
+       calendar_name = EXCLUDED.calendar_name,
+       updated_at = CURRENT_TIMESTAMP`,
+    [
+      userId,
+      eventDate,
+      eventType,
+      eventId,
+      process.env.GOOGLE_CALENDAR_NAME || 'qk79io4u5ku7apiok8btsajc5k@group.calendar.google.com',
+    ]
+  )
+}
 
 module.exports = router
