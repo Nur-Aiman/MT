@@ -11,6 +11,86 @@ import moment from 'moment-timezone'
 import './SurahList.css'
 
 const STORAGE_KEY = 'murajaah_auth'
+const YOUTUBE_IFRAME_API_URL = 'https://www.youtube.com/iframe_api'
+
+let youtubeIframeApiPromise = null
+
+const getYouTubeVideoId = (value) => {
+  const normalized = String(value ?? '').trim()
+  if (!normalized) return null
+
+  try {
+    const url = new URL(normalized)
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, '')
+    const pathParts = url.pathname.split('/').filter(Boolean)
+    let videoId = null
+
+    if (hostname === 'youtu.be') {
+      videoId = pathParts[0]
+    } else if (
+      hostname === 'youtube.com' ||
+      hostname.endsWith('.youtube.com') ||
+      hostname === 'youtube-nocookie.com' ||
+      hostname.endsWith('.youtube-nocookie.com')
+    ) {
+      if (url.pathname === '/watch') {
+        videoId = url.searchParams.get('v')
+      } else if (['embed', 'shorts', 'live', 'v'].includes(pathParts[0])) {
+        videoId = pathParts[1]
+      }
+    }
+
+    return /^[A-Za-z0-9_-]{11}$/.test(videoId || '') ? videoId : null
+  } catch {
+    return null
+  }
+}
+
+const loadYouTubeIframeApi = () => {
+  if (window.YT?.Player) return Promise.resolve(window.YT)
+  if (youtubeIframeApiPromise) return youtubeIframeApiPromise
+
+  youtubeIframeApiPromise = new Promise((resolve, reject) => {
+    let settled = false
+    const existingReadyHandler = window.onYouTubeIframeAPIReady
+    const timeoutId = window.setTimeout(() => {
+      if (settled) return
+      settled = true
+      youtubeIframeApiPromise = null
+      reject(new Error('YouTube player took too long to load'))
+    }, 15000)
+
+    window.onYouTubeIframeAPIReady = () => {
+      if (typeof existingReadyHandler === 'function') existingReadyHandler()
+      if (settled) return
+      settled = true
+      window.clearTimeout(timeoutId)
+      resolve(window.YT)
+    }
+
+    let script = document.querySelector(`script[src='${YOUTUBE_IFRAME_API_URL}']`)
+    if (!script) {
+      script = document.createElement('script')
+      script.src = YOUTUBE_IFRAME_API_URL
+      script.async = true
+      document.head.appendChild(script)
+    }
+
+    script.addEventListener(
+      'error',
+      () => {
+        if (settled) return
+        settled = true
+        window.clearTimeout(timeoutId)
+        youtubeIframeApiPromise = null
+        reject(new Error('Unable to load the YouTube player'))
+      },
+      { once: true }
+    )
+  })
+
+  return youtubeIframeApiPromise
+}
 
 function SurahList() {
   const [surahs, setSurahs] = useState([])
@@ -41,6 +121,13 @@ function SurahList() {
   const currentAudioIndexRef = useRef(0)
   const audioRequestRef = useRef(0)
   const audioBySurahCacheRef = useRef(new Map())
+  const activeAudioIdRef = useRef(null)
+  const activeAudioSourceRef = useRef(null)
+  const activeYouTubeVideoIdRef = useRef(null)
+  const youtubePlayerHostRef = useRef(null)
+  const youtubePlayerRef = useRef(null)
+  const youtubePlayerPromiseRef = useRef(null)
+  const youtubeEndedHandlerRef = useRef(null)
 
   const navigate = useNavigate()
 
@@ -170,13 +257,166 @@ function SurahList() {
     preloadAudioElement(audioRefs.current[bufferedSlot], playlist[startIndex + 1])
   }
 
+  const stopYouTubePlayback = () => {
+    try {
+      youtubePlayerRef.current?.stopVideo()
+    } catch {
+      // The iframe may still be initializing. The request guard prevents it
+      // from starting an older selection once initialization completes.
+    }
+  }
+
+  const getYouTubePlayer = async () => {
+    if (youtubePlayerRef.current?.loadVideoById) return youtubePlayerRef.current
+    if (youtubePlayerPromiseRef.current) return youtubePlayerPromiseRef.current
+
+    youtubePlayerPromiseRef.current = (async () => {
+      const YT = await loadYouTubeIframeApi()
+      const host = youtubePlayerHostRef.current
+      if (!host) throw new Error('YouTube player is unavailable')
+
+      host.replaceChildren()
+      const mount = document.createElement('div')
+      host.appendChild(mount)
+
+      return new Promise((resolve, reject) => {
+        try {
+          const player = new YT.Player(mount, {
+            width: '1',
+            height: '1',
+            playerVars: {
+              autoplay: 0,
+              controls: 0,
+              disablekb: 1,
+              origin: window.location.origin,
+              playsinline: 1,
+              rel: 0,
+            },
+            events: {
+              onReady: (event) => {
+                youtubePlayerRef.current = event.target
+                resolve(event.target)
+              },
+              onStateChange: (event) => {
+                if (activeAudioSourceRef.current !== 'youtube') return
+
+                const currentId = activeAudioIdRef.current
+                if (event.data === YT.PlayerState.PLAYING) {
+                  setLoadingAudioId(null)
+                  setIsAudioPlaying(true)
+                  setAudioError(null)
+                } else if (
+                  event.data === YT.PlayerState.PAUSED ||
+                  event.data === YT.PlayerState.CUED
+                ) {
+                  setLoadingAudioId(null)
+                  setIsAudioPlaying(false)
+                } else if (event.data === YT.PlayerState.ENDED) {
+                  setLoadingAudioId(null)
+                  setIsAudioPlaying(false)
+                  youtubeEndedHandlerRef.current?.()
+                } else if (event.data === YT.PlayerState.BUFFERING && currentId) {
+                  setLoadingAudioId(currentId)
+                }
+              },
+              onError: (event) => {
+                if (activeAudioSourceRef.current !== 'youtube') return
+
+                const failedVideoId = event.target?.getVideoData?.().video_id
+                if (
+                  failedVideoId &&
+                  activeYouTubeVideoIdRef.current &&
+                  failedVideoId !== activeYouTubeVideoIdRef.current
+                ) {
+                  return
+                }
+
+                const failedId = activeAudioIdRef.current
+                activeAudioIdRef.current = null
+                activeAudioSourceRef.current = null
+                activeYouTubeVideoIdRef.current = null
+                setActiveAudioId(null)
+                setLoadingAudioId(null)
+                setIsAudioPlaying(false)
+                setAudioError({
+                  id: failedId,
+                  message: 'This YouTube recitation cannot be played here.',
+                })
+              },
+            },
+          })
+
+          youtubePlayerRef.current = player
+        } catch (error) {
+          reject(error)
+        }
+      })
+    })()
+
+    try {
+      return await youtubePlayerPromiseRef.current
+    } catch (error) {
+      youtubePlayerPromiseRef.current = null
+      youtubePlayerRef.current = null
+      throw error
+    }
+  }
+
   const handleSurahAudioToggle = async (surah, siblingSurahs = []) => {
     const idKey = normalizeSurahId(surah.id)
     const range = getSurahAudioRange(surah, siblingSurahs)
-    const activeAudio = audioRefs.current[activeAudioSlotRef.current]
-    if (!range || !activeAudio) return
+    const favouriteYouTubeLink = String(surah.favourite_recitation_video ?? '').trim()
+    const youtubeVideoId = getYouTubeVideoId(favouriteYouTubeLink)
+    const selectedSource = youtubeVideoId ? 'youtube' : 'verses'
+    const isSameSelection =
+      activeAudioId === idKey &&
+      activeAudioSourceRef.current === selectedSource &&
+      (selectedSource !== 'youtube' || activeYouTubeVideoIdRef.current === youtubeVideoId)
 
-    if (activeAudioId === idKey && loadingAudioId !== idKey) {
+    if (!range) return
+
+    if (favouriteYouTubeLink && !youtubeVideoId) {
+      audioRequestRef.current += 1
+      audioRefs.current.forEach((audio) => audio?.pause())
+      stopYouTubePlayback()
+      activeAudioIdRef.current = null
+      activeAudioSourceRef.current = null
+      activeYouTubeVideoIdRef.current = null
+      setActiveAudioId(null)
+      setIsAudioPlaying(false)
+      setLoadingAudioId(null)
+      setAudioError({
+        id: idKey,
+        message: 'Favourite recitation must link to a specific YouTube video.',
+      })
+      return
+    }
+
+    if (isSameSelection && loadingAudioId !== idKey) {
+      if (selectedSource === 'youtube') {
+        try {
+          const player = await getYouTubePlayer()
+          if (isAudioPlaying) {
+            player.pauseVideo()
+            setIsAudioPlaying(false)
+          } else {
+            if (player.getPlayerState?.() === window.YT?.PlayerState?.ENDED) {
+              player.seekTo(0, true)
+            }
+            player.playVideo()
+            setIsAudioPlaying(true)
+            setAudioError(null)
+          }
+        } catch (error) {
+          console.error('Unable to control YouTube recitation:', error)
+          setAudioError({ id: idKey, message: 'Unable to play YouTube recitation.' })
+        }
+        return
+      }
+
+      const activeAudio = audioRefs.current[activeAudioSlotRef.current]
+      if (!activeAudio) return
+
       if (isAudioPlaying) {
         activeAudio.pause()
         setIsAudioPlaying(false)
@@ -206,10 +446,43 @@ function SurahList() {
     const requestId = audioRequestRef.current + 1
     audioRequestRef.current = requestId
     audioRefs.current.forEach((audio) => audio?.pause())
+    stopYouTubePlayback()
+    activeAudioIdRef.current = idKey
+    activeAudioSourceRef.current = selectedSource
+    activeYouTubeVideoIdRef.current = youtubeVideoId
     setActiveAudioId(idKey)
     setIsAudioPlaying(false)
     setLoadingAudioId(idKey)
     setAudioError(null)
+
+    if (selectedSource === 'youtube') {
+      audioPlaylistRef.current = []
+      currentAudioIndexRef.current = 0
+
+      try {
+        const player = await getYouTubePlayer()
+        if (requestId !== audioRequestRef.current) return
+
+        player.loadVideoById(youtubeVideoId)
+        player.playVideo()
+        setIsAudioPlaying(true)
+      } catch (error) {
+        if (requestId !== audioRequestRef.current) return
+        console.error('Unable to play YouTube recitation:', error)
+        activeAudioIdRef.current = null
+        activeAudioSourceRef.current = null
+        activeYouTubeVideoIdRef.current = null
+        setActiveAudioId(null)
+        setIsAudioPlaying(false)
+        setAudioError({
+          id: idKey,
+          message: error.message || 'Unable to play YouTube recitation.',
+        })
+      } finally {
+        if (requestId === audioRequestRef.current) setLoadingAudioId(null)
+      }
+      return
+    }
 
     try {
       const playlist = await fetchSurahAudioPlaylist(range)
@@ -229,6 +502,9 @@ function SurahList() {
       audioRefs.current.forEach(clearAudioElement)
       audioPlaylistRef.current = []
       currentAudioIndexRef.current = 0
+      activeAudioIdRef.current = null
+      activeAudioSourceRef.current = null
+      activeYouTubeVideoIdRef.current = null
       setActiveAudioId(null)
       setIsAudioPlaying(false)
       setAudioError({ id: idKey, message: error.message || 'Unable to play audio. Try again.' })
@@ -240,7 +516,12 @@ function SurahList() {
   }
 
   const handleSurahAudioEnded = (endedSlot) => {
-    if (endedSlot !== activeAudioSlotRef.current) return
+    if (
+      activeAudioSourceRef.current !== 'verses' ||
+      endedSlot !== activeAudioSlotRef.current
+    ) {
+      return
+    }
 
     const nextIndex = currentAudioIndexRef.current + 1
     if (nextIndex >= audioPlaylistRef.current.length) {
@@ -288,6 +569,9 @@ function SurahList() {
       audioRefs.current.forEach(clearAudioElement)
       audioPlaylistRef.current = []
       currentAudioIndexRef.current = 0
+      activeAudioIdRef.current = null
+      activeAudioSourceRef.current = null
+      activeYouTubeVideoIdRef.current = null
       setActiveAudioId(null)
       setIsAudioPlaying(false)
       setAudioError({
@@ -296,6 +580,19 @@ function SurahList() {
       })
     })
   }
+
+  useEffect(() => {
+    const hasYouTubeRecitation = surahs.some((surah) =>
+      getYouTubeVideoId(surah.favourite_recitation_video)
+    )
+    if (!hasYouTubeRecitation) return
+
+    getYouTubePlayer().catch((error) => {
+      console.error('Unable to prepare YouTube recitation player:', error)
+    })
+    // The player instance is cached; this only needs to react to fetched data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [surahs])
 
   useEffect(() => {
     const audioElements = [...audioRefs.current]
@@ -307,6 +604,13 @@ function SurahList() {
         audio.pause()
         audio.removeAttribute('src')
       })
+      try {
+        youtubePlayerRef.current?.destroy()
+      } catch {
+        // The iframe may have already removed itself.
+      }
+      youtubePlayerRef.current = null
+      youtubePlayerPromiseRef.current = null
     }
   }, [])
 
@@ -612,8 +916,37 @@ function SurahList() {
         : null
   }
 
+  youtubeEndedHandlerRef.current = () => {
+    if (activeAudioSourceRef.current !== 'youtube') return
+
+    if (isAudioRepeating) {
+      const player = youtubePlayerRef.current
+      if (!player) {
+        setIsAudioPlaying(false)
+        return
+      }
+
+      player.seekTo(0, true)
+      player.playVideo()
+      setIsAudioPlaying(true)
+      return
+    }
+
+    if (nextAudioSelection) {
+      handleSurahAudioToggle(
+        nextAudioSelection.surah,
+        nextAudioSelection.siblingSurahs
+      )
+    } else {
+      setIsAudioPlaying(false)
+    }
+  }
+
   const isFloatingAudioLoading =
     !!activeAudioId && loadingAudioId === activeAudioId
+  const activeUsesYouTube = Boolean(
+    getYouTubeVideoId(activeAudioSurah?.favourite_recitation_video)
+  )
   const floatingAudioStatus = isFloatingAudioLoading
     ? 'Loading recitation'
     : isAudioPlaying
@@ -626,6 +959,11 @@ function SurahList() {
         activeAudioSurah ? 'surah-list-container--audio-active' : ''
       }`}
     >
+      <div
+        ref={youtubePlayerHostRef}
+        className={'surah-youtube-player'}
+        aria-hidden={true}
+      />
       {[0, 1].map((slot) => (
         <audio
           key={slot}
@@ -1013,6 +1351,7 @@ function SurahList() {
             {activeAudioRange && (
               <span className="floating-audio-range">
                 Verses {activeAudioRange.verseStart}–{activeAudioRange.verseEnd}
+                {activeUsesYouTube ? ' (YouTube)' : ''}
               </span>
             )}
           </div>

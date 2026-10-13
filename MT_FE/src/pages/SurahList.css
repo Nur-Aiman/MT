@@ -792,6 +792,16 @@ button {
   display: none;
 }
 
+.surah-youtube-player {
+  position: fixed;
+  left: -10000px;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .surah-actions {
   display: flex;
   align-items: center;
