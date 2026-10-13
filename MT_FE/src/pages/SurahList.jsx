@@ -12,6 +12,11 @@ import './SurahList.css'
 
 const STORAGE_KEY = 'murajaah_auth'
 const YOUTUBE_IFRAME_API_URL = 'https://www.youtube.com/iframe_api'
+const GAPLESS_INITIAL_SEGMENTS = 4
+const GAPLESS_SCHEDULE_AHEAD_SECONDS = 30
+const GAPLESS_CROSSFADE_SECONDS = 0.018
+const GAPLESS_SILENCE_THRESHOLD = 0.003
+const GAPLESS_EDGE_PADDING_SECONDS = 0.018
 
 let youtubeIframeApiPromise = null
 
@@ -43,6 +48,69 @@ const getYouTubeVideoId = (value) => {
     return /^[A-Za-z0-9_-]{11}$/.test(videoId || '') ? videoId : null
   } catch {
     return null
+  }
+}
+
+const getTrimmedAudioRegion = (buffer) => {
+  const channelData = Array.from(
+    { length: buffer.numberOfChannels },
+    (_, channel) => buffer.getChannelData(channel)
+  )
+  const blockSize = 128
+  const hasAudioInRange = (start, end) => {
+    for (const samples of channelData) {
+      for (let index = start; index < end; index += 1) {
+        if (Math.abs(samples[index]) >= GAPLESS_SILENCE_THRESHOLD) return true
+      }
+    }
+    return false
+  }
+
+  let firstAudioBlock = -1
+  for (let start = 0; start < buffer.length; start += blockSize) {
+    if (hasAudioInRange(start, Math.min(buffer.length, start + blockSize))) {
+      firstAudioBlock = start
+      break
+    }
+  }
+
+  if (firstAudioBlock < 0) {
+    return { buffer, offset: 0, duration: buffer.duration }
+  }
+
+  let lastAudioBlock = firstAudioBlock
+  for (let end = buffer.length; end > firstAudioBlock; end -= blockSize) {
+    const start = Math.max(firstAudioBlock, end - blockSize)
+    if (hasAudioInRange(start, end)) {
+      lastAudioBlock = start
+      break
+    }
+  }
+
+  let firstFrame = firstAudioBlock
+  const firstBlockEnd = Math.min(buffer.length, firstAudioBlock + blockSize)
+  while (firstFrame < firstBlockEnd && !hasAudioInRange(firstFrame, firstFrame + 1)) {
+    firstFrame += 1
+  }
+
+  let lastFrame = Math.min(buffer.length - 1, lastAudioBlock + blockSize - 1)
+  while (lastFrame > firstFrame && !hasAudioInRange(lastFrame, lastFrame + 1)) {
+    lastFrame -= 1
+  }
+
+  const paddingFrames = Math.floor(buffer.sampleRate * GAPLESS_EDGE_PADDING_SECONDS)
+  const startFrame = Math.max(0, firstFrame - paddingFrames)
+  const endFrame = Math.min(buffer.length, lastFrame + paddingFrames + 1)
+  const duration = (endFrame - startFrame) / buffer.sampleRate
+
+  if (duration < 0.1) {
+    return { buffer, offset: 0, duration: buffer.duration }
+  }
+
+  return {
+    buffer,
+    offset: startFrame / buffer.sampleRate,
+    duration,
   }
 }
 
@@ -121,6 +189,23 @@ function SurahList() {
   const currentAudioIndexRef = useRef(0)
   const audioRequestRef = useRef(0)
   const audioBySurahCacheRef = useRef(new Map())
+  const audioPlaybackEngineRef = useRef(null)
+  const gaplessCompletionHandlerRef = useRef(null)
+  const gaplessErrorHandlerRef = useRef(null)
+  const gaplessAudioRef = useRef({
+    context: null,
+    masterGain: null,
+    sources: new Set(),
+    abortControllers: new Set(),
+    timer: null,
+    generation: 0,
+    busyGeneration: null,
+    playlist: [],
+    initialSegments: [],
+    nextIndex: 0,
+    nextStartTime: 0,
+    finished: true,
+  })
   const activeAudioIdRef = useRef(null)
   const activeAudioSourceRef = useRef(null)
   const activeYouTubeVideoIdRef = useRef(null)
@@ -257,6 +342,196 @@ function SurahList() {
     preloadAudioElement(audioRefs.current[bufferedSlot], playlist[startIndex + 1])
   }
 
+  const ensureGaplessAudioContext = () => {
+    const state = gaplessAudioRef.current
+    if (state.context?.state === 'closed') {
+      state.context = null
+      state.masterGain = null
+    }
+
+    if (!state.context) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext
+      if (!AudioContextClass) throw new Error('Continuous audio is not supported by this browser')
+
+      state.context = new AudioContextClass()
+      state.masterGain = state.context.createGain()
+      state.masterGain.connect(state.context.destination)
+    }
+
+    return state.context
+  }
+
+  const decodeGaplessSegment = async (url, context) => {
+    const state = gaplessAudioRef.current
+    const controller = new AbortController()
+    state.abortControllers.add(controller)
+
+    try {
+      const response = await fetch(url, { signal: controller.signal })
+      if (!response.ok) throw new Error('Unable to buffer recitation audio')
+
+      const encodedAudio = await response.arrayBuffer()
+      const buffer = await context.decodeAudioData(encodedAudio)
+      return { url, ...getTrimmedAudioRegion(buffer) }
+    } finally {
+      state.abortControllers.delete(controller)
+    }
+  }
+
+  const stopGaplessPlayback = ({ clearInitialSegments = false } = {}) => {
+    const state = gaplessAudioRef.current
+    state.generation += 1
+
+    if (state.timer) {
+      window.clearInterval(state.timer)
+      state.timer = null
+    }
+
+    state.abortControllers.forEach((controller) => controller.abort())
+    state.abortControllers.clear()
+
+    const activeSources = [...state.sources]
+    state.sources.clear()
+    activeSources.forEach(({ source, gain }) => {
+      source.onended = null
+      try {
+        source.stop()
+      } catch {
+        // A source that already ended cannot be stopped again.
+      }
+      source.disconnect()
+      gain.disconnect()
+    })
+
+    state.busyGeneration = null
+    state.playlist = []
+    state.nextIndex = 0
+    state.nextStartTime = 0
+    state.finished = true
+    if (clearInitialSegments) state.initialSegments = []
+  }
+
+  const scheduleGaplessSegment = (segment, index, generation) => {
+    const state = gaplessAudioRef.current
+    const context = state.context
+    if (!context || generation !== state.generation) return
+
+    const startTime = Math.max(state.nextStartTime, context.currentTime + 0.06)
+    const endTime = startTime + segment.duration
+    const fadeDuration = Math.min(0.008, segment.duration / 4)
+    const source = context.createBufferSource()
+    const segmentGain = context.createGain()
+    const entry = { source, gain: segmentGain }
+
+    source.buffer = segment.buffer
+    source.connect(segmentGain)
+    segmentGain.connect(state.masterGain)
+    segmentGain.gain.setValueAtTime(0, startTime)
+    segmentGain.gain.linearRampToValueAtTime(1, startTime + fadeDuration)
+    segmentGain.gain.setValueAtTime(1, Math.max(startTime + fadeDuration, endTime - fadeDuration))
+    segmentGain.gain.linearRampToValueAtTime(0, endTime)
+
+    source.onended = () => {
+      state.sources.delete(entry)
+      source.disconnect()
+      segmentGain.disconnect()
+
+      if (
+        generation === state.generation &&
+        index === state.playlist.length - 1 &&
+        state.nextIndex >= state.playlist.length
+      ) {
+        if (state.timer) {
+          window.clearInterval(state.timer)
+          state.timer = null
+        }
+        state.finished = true
+        gaplessCompletionHandlerRef.current?.()
+      }
+    }
+
+    state.sources.add(entry)
+    source.start(startTime, segment.offset, segment.duration)
+    state.nextStartTime = endTime - GAPLESS_CROSSFADE_SECONDS
+  }
+
+  const fillGaplessSchedule = async (generation) => {
+    const state = gaplessAudioRef.current
+    const context = state.context
+    if (
+      !context ||
+      generation !== state.generation ||
+      state.busyGeneration === generation
+    ) {
+      return
+    }
+
+    state.busyGeneration = generation
+    try {
+      while (
+        generation === state.generation &&
+        state.nextIndex < state.playlist.length &&
+        state.nextStartTime < context.currentTime + GAPLESS_SCHEDULE_AHEAD_SECONDS
+      ) {
+        const index = state.nextIndex
+        const segment = await decodeGaplessSegment(state.playlist[index], context)
+        if (generation !== state.generation) return
+
+        scheduleGaplessSegment(segment, index, generation)
+        state.nextIndex = index + 1
+      }
+    } catch (error) {
+      if (generation === state.generation) {
+        gaplessErrorHandlerRef.current?.(error)
+      }
+    } finally {
+      if (state.busyGeneration === generation) state.busyGeneration = null
+    }
+  }
+
+  const startGaplessPlayback = async (playlist, requestId) => {
+    const state = gaplessAudioRef.current
+    const reusableInitialSegments = state.initialSegments
+    stopGaplessPlayback()
+
+    const generation = state.generation
+    const context = ensureGaplessAudioContext()
+    if (context.state === 'suspended') await context.resume()
+
+    state.playlist = playlist
+    state.finished = false
+    const initialCount = Math.min(GAPLESS_INITIAL_SEGMENTS, playlist.length)
+    const initialUrls = playlist.slice(0, initialCount)
+    const canReuseInitialSegments =
+      reusableInitialSegments.length === initialUrls.length &&
+      reusableInitialSegments.every((segment, index) => segment.url === initialUrls[index])
+
+    const initialSegments = canReuseInitialSegments
+      ? reusableInitialSegments
+      : await Promise.all(initialUrls.map((url) => decodeGaplessSegment(url, context)))
+
+    if (
+      generation !== state.generation ||
+      requestId !== audioRequestRef.current
+    ) {
+      return false
+    }
+
+    state.initialSegments = initialSegments
+    state.nextStartTime = context.currentTime + 0.08
+    state.nextIndex = 0
+    initialSegments.forEach((segment, index) => {
+      scheduleGaplessSegment(segment, index, generation)
+      state.nextIndex = index + 1
+    })
+
+    state.timer = window.setInterval(() => {
+      fillGaplessSchedule(generation)
+    }, 2000)
+    fillGaplessSchedule(generation)
+    return true
+  }
+
   const stopYouTubePlayback = () => {
     try {
       youtubePlayerRef.current?.stopVideo()
@@ -335,6 +610,7 @@ function SurahList() {
                 activeAudioIdRef.current = null
                 activeAudioSourceRef.current = null
                 activeYouTubeVideoIdRef.current = null
+                audioPlaybackEngineRef.current = null
                 setActiveAudioId(null)
                 setLoadingAudioId(null)
                 setIsAudioPlaying(false)
@@ -378,7 +654,9 @@ function SurahList() {
     if (favouriteYouTubeLink && !youtubeVideoId) {
       audioRequestRef.current += 1
       audioRefs.current.forEach((audio) => audio?.pause())
+      stopGaplessPlayback()
       stopYouTubePlayback()
+      audioPlaybackEngineRef.current = null
       activeAudioIdRef.current = null
       activeAudioSourceRef.current = null
       activeYouTubeVideoIdRef.current = null
@@ -410,6 +688,39 @@ function SurahList() {
         } catch (error) {
           console.error('Unable to control YouTube recitation:', error)
           setAudioError({ id: idKey, message: 'Unable to play YouTube recitation.' })
+        }
+        return
+      }
+
+      if (audioPlaybackEngineRef.current === 'gapless') {
+        const state = gaplessAudioRef.current
+        const context = state.context
+        if (!context) return
+
+        try {
+          if (isAudioPlaying) {
+            await context.suspend()
+            setIsAudioPlaying(false)
+          } else if (state.finished) {
+            setLoadingAudioId(idKey)
+            const started = await startGaplessPlayback(
+              audioPlaylistRef.current,
+              audioRequestRef.current
+            )
+            if (started) {
+              setIsAudioPlaying(true)
+              setAudioError(null)
+            }
+            setLoadingAudioId(null)
+          } else {
+            await context.resume()
+            setIsAudioPlaying(true)
+            setAudioError(null)
+          }
+        } catch (error) {
+          console.error('Unable to control continuous Surah audio:', error)
+          setLoadingAudioId(null)
+          setAudioError({ id: idKey, message: 'Unable to play audio. Try again.' })
         }
         return
       }
@@ -446,7 +757,9 @@ function SurahList() {
     const requestId = audioRequestRef.current + 1
     audioRequestRef.current = requestId
     audioRefs.current.forEach((audio) => audio?.pause())
+    stopGaplessPlayback()
     stopYouTubePlayback()
+    audioPlaybackEngineRef.current = null
     activeAudioIdRef.current = idKey
     activeAudioSourceRef.current = selectedSource
     activeYouTubeVideoIdRef.current = youtubeVideoId
@@ -456,6 +769,7 @@ function SurahList() {
     setAudioError(null)
 
     if (selectedSource === 'youtube') {
+      audioPlaybackEngineRef.current = 'youtube'
       audioPlaylistRef.current = []
       currentAudioIndexRef.current = 0
 
@@ -472,6 +786,7 @@ function SurahList() {
         activeAudioIdRef.current = null
         activeAudioSourceRef.current = null
         activeYouTubeVideoIdRef.current = null
+        audioPlaybackEngineRef.current = null
         setActiveAudioId(null)
         setIsAudioPlaying(false)
         setAudioError({
@@ -490,6 +805,28 @@ function SurahList() {
 
       audioPlaylistRef.current = playlist
       currentAudioIndexRef.current = 0
+
+      try {
+        audioPlaybackEngineRef.current = 'gapless'
+        const started = await startGaplessPlayback(playlist, requestId)
+        if (requestId !== audioRequestRef.current) {
+          stopGaplessPlayback()
+          return
+        }
+
+        if (started) {
+          audioPlaybackEngineRef.current = 'gapless'
+          setIsAudioPlaying(true)
+          return
+        }
+      } catch (gaplessError) {
+        if (requestId !== audioRequestRef.current) return
+        console.warn('Continuous audio unavailable; using compatibility playback:', gaplessError)
+        audioPlaybackEngineRef.current = null
+        stopGaplessPlayback()
+      }
+
+      audioPlaybackEngineRef.current = 'html'
       prepareAudioSlots(playlist)
       await audioRefs.current[0].play()
 
@@ -505,6 +842,7 @@ function SurahList() {
       activeAudioIdRef.current = null
       activeAudioSourceRef.current = null
       activeYouTubeVideoIdRef.current = null
+      audioPlaybackEngineRef.current = null
       setActiveAudioId(null)
       setIsAudioPlaying(false)
       setAudioError({ id: idKey, message: error.message || 'Unable to play audio. Try again.' })
@@ -518,6 +856,7 @@ function SurahList() {
   const handleSurahAudioEnded = (endedSlot) => {
     if (
       activeAudioSourceRef.current !== 'verses' ||
+      audioPlaybackEngineRef.current !== 'html' ||
       endedSlot !== activeAudioSlotRef.current
     ) {
       return
@@ -572,6 +911,7 @@ function SurahList() {
       activeAudioIdRef.current = null
       activeAudioSourceRef.current = null
       activeYouTubeVideoIdRef.current = null
+      audioPlaybackEngineRef.current = null
       setActiveAudioId(null)
       setIsAudioPlaying(false)
       setAudioError({
@@ -596,6 +936,7 @@ function SurahList() {
 
   useEffect(() => {
     const audioElements = [...audioRefs.current]
+    const gaplessState = gaplessAudioRef.current
 
     return () => {
       audioRequestRef.current += 1
@@ -604,6 +945,10 @@ function SurahList() {
         audio.pause()
         audio.removeAttribute('src')
       })
+      stopGaplessPlayback({ clearInitialSegments: true })
+      gaplessState.context?.close().catch(() => {})
+      gaplessState.context = null
+      gaplessState.masterGain = null
       try {
         youtubePlayerRef.current?.destroy()
       } catch {
@@ -612,6 +957,7 @@ function SurahList() {
       youtubePlayerRef.current = null
       youtubePlayerPromiseRef.current = null
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -940,6 +1286,58 @@ function SurahList() {
     } else {
       setIsAudioPlaying(false)
     }
+  }
+
+  gaplessCompletionHandlerRef.current = () => {
+    if (
+      activeAudioSourceRef.current !== 'verses' ||
+      audioPlaybackEngineRef.current !== 'gapless'
+    ) {
+      return
+    }
+
+    if (isAudioRepeating && audioPlaylistRef.current.length > 0) {
+      const requestId = audioRequestRef.current
+      const currentId = activeAudioIdRef.current
+      setLoadingAudioId(currentId)
+      startGaplessPlayback(audioPlaylistRef.current, requestId)
+        .then((started) => {
+          if (started && requestId === audioRequestRef.current) {
+            setIsAudioPlaying(true)
+            setLoadingAudioId(null)
+          }
+        })
+        .catch((error) => gaplessErrorHandlerRef.current?.(error))
+      return
+    }
+
+    if (nextAudioSelection) {
+      handleSurahAudioToggle(
+        nextAudioSelection.surah,
+        nextAudioSelection.siblingSurahs
+      )
+    } else {
+      setIsAudioPlaying(false)
+    }
+  }
+
+  gaplessErrorHandlerRef.current = (error) => {
+    if (audioPlaybackEngineRef.current !== 'gapless') return
+
+    const failedId = activeAudioIdRef.current
+    console.error('Continuous Surah audio stopped:', error)
+    stopGaplessPlayback()
+    audioPlaybackEngineRef.current = null
+    activeAudioIdRef.current = null
+    activeAudioSourceRef.current = null
+    activeYouTubeVideoIdRef.current = null
+    setActiveAudioId(null)
+    setLoadingAudioId(null)
+    setIsAudioPlaying(false)
+    setAudioError({
+      id: failedId,
+      message: 'Audio stopped while buffering the next verse. Try again.',
+    })
   }
 
   const isFloatingAudioLoading =
