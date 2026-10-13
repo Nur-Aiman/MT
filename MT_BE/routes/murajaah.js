@@ -16,6 +16,30 @@ const getUserId = (req) => {
   return Number.isFinite(userId) && userId > 0 ? userId : null;
 };
 
+const normalizeOptionalYouTubeUrl = (value) => {
+  const normalized = String(value ?? '').trim()
+  return normalized || null
+}
+
+const isYouTubeUrl = (value) => {
+  if (!value) return true
+
+  try {
+    const url = new URL(value)
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, '')
+    const isYouTubeHost =
+      hostname === 'youtu.be' ||
+      hostname === 'youtube.com' ||
+      hostname.endsWith('.youtube.com') ||
+      hostname === 'youtube-nocookie.com' ||
+      hostname.endsWith('.youtube-nocookie.com')
+
+    return ['http:', 'https:'].includes(url.protocol) && isYouTubeHost
+  } catch {
+    return false
+  }
+}
+
 
 //test
 
@@ -29,7 +53,21 @@ router.post('/addsurah', async (req, res) => {
   const user_id = getUserId(req)
   if (!user_id) return res.status(400).json({ message: 'user_id is required' })
 
-  const { id, parent_id, chapter_name, total_verse, verse_memorized, juz, note } = req.body
+  const {
+    id,
+    parent_id,
+    chapter_name,
+    total_verse,
+    verse_memorized,
+    juz,
+    note,
+    favourite_recitation_video,
+  } = req.body
+  const favouriteRecitationVideo = normalizeOptionalYouTubeUrl(favourite_recitation_video)
+
+  if (!isYouTubeUrl(favouriteRecitationVideo)) {
+    return res.status(400).json({ message: 'Favourite recitation video must be a valid YouTube link' })
+  }
 
   try {
     // Convert id and parent_id to numeric for proper decimal support
@@ -67,9 +105,9 @@ router.post('/addsurah', async (req, res) => {
     // Insert new surah only if check passed
     const insertQuery = `
       INSERT INTO memorized_surah
-        (id, parent_id, chapter_name, total_verse, verse_memorized, juz, note, user_id)
+        (id, parent_id, chapter_name, total_verse, verse_memorized, juz, note, favourite_recitation_video, user_id)
       VALUES
-        ($1::numeric, $2::numeric, $3, $4, $5, $6, $7, $8)
+        ($1::numeric, $2::numeric, $3, $4, $5, $6, $7, $8, $9)
       RETURNING pk_id, id, user_id
     `
 
@@ -81,6 +119,7 @@ router.post('/addsurah', async (req, res) => {
       verse_memorized,
       juz,
       note,
+      favouriteRecitationVideo,
       user_id,
     ])
     
@@ -117,6 +156,7 @@ router.get('/getmemorizedsurah', (req, res) => {
       verse_memorized,
       juz,
       note,
+      favourite_recitation_video,
       murajaah_counter,
       user_id,
       pk_id
@@ -385,18 +425,45 @@ router.put('/updatesurah/:id', (req, res) => {
   const user_id = getUserId(req)
   if (!user_id) return res.status(400).json({ message: 'user_id is required' })
 
-  const { chapter_name, total_verse, verse_memorized, juz, note } = req.body
+  const {
+    chapter_name,
+    total_verse,
+    verse_memorized,
+    juz,
+    note,
+    favourite_recitation_video,
+  } = req.body
+  const favouriteRecitationVideo = normalizeOptionalYouTubeUrl(favourite_recitation_video)
+
+  if (!isYouTubeUrl(favouriteRecitationVideo)) {
+    return res.status(400).json({ message: 'Favourite recitation video must be a valid YouTube link' })
+  }
+
   const surahId = parseFloat(req.params.id)
 
   const updateQuery = `
     UPDATE memorized_surah
-    SET chapter_name = $1, total_verse = $2, verse_memorized = $3, juz = $4, note = $5
-    WHERE id = $6::numeric AND user_id = $7
+    SET chapter_name = $1,
+        total_verse = $2,
+        verse_memorized = $3,
+        juz = $4,
+        note = $5,
+        favourite_recitation_video = $6
+    WHERE id = $7::numeric AND user_id = $8
   `
 
   pool.query(
     updateQuery,
-    [chapter_name, total_verse, verse_memorized, juz, note, surahId, user_id],
+    [
+      chapter_name,
+      total_verse,
+      verse_memorized,
+      juz,
+      note,
+      favouriteRecitationVideo,
+      surahId,
+      user_id,
+    ],
     (err, result) => {
       if (err) {
         console.error(err)

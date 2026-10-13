@@ -1,6 +1,25 @@
 import React, { useState, useEffect } from 'react'
 import { HOST } from '../api'
 
+const isYouTubeUrl = (value) => {
+  if (!value) return true
+
+  try {
+    const url = new URL(value)
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, '')
+    const isYouTubeHost =
+      hostname === 'youtu.be' ||
+      hostname === 'youtube.com' ||
+      hostname.endsWith('.youtube.com') ||
+      hostname === 'youtube-nocookie.com' ||
+      hostname.endsWith('.youtube-nocookie.com')
+
+    return ['http:', 'https:'].includes(url.protocol) && isYouTubeHost
+  } catch {
+    return false
+  }
+}
+
 function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData, userId }) {
   const [formData, setFormData] = useState({
     id: '',
@@ -10,6 +29,7 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData, userId }) {
     verse_memorized: '',
     juz: '',
     note: '',
+    favourite_recitation_video: '',
   })
   const [isSuccess, setIsSuccess] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
@@ -26,6 +46,7 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData, userId }) {
         verse_memorized: initialData.verse_memorized || '',
         juz: initialData.juz || '',
         note: initialData.note || '',
+        favourite_recitation_video: initialData.favourite_recitation_video || '',
       })
       // If initialData has parent_id and we have subsections available, we're in edit mode
       setIsEditMode(true)
@@ -62,6 +83,7 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData, userId }) {
       verse_memorized: '',
       juz: '',
       note: '',
+      favourite_recitation_video: '',
     })
   }
 
@@ -136,6 +158,12 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData, userId }) {
       return
     }
 
+    const favouriteRecitationVideo = formData.favourite_recitation_video.trim()
+    if (!isYouTubeUrl(favouriteRecitationVideo)) {
+      alert('Favourite recitation video must be a valid YouTube link')
+      return
+    }
+
     const endpoint = isEditMode
       ? `${HOST}/murajaah/updatesurah/${formData.id}`
       : `${HOST}/murajaah/addsurah`
@@ -146,6 +174,7 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData, userId }) {
       user_id: userId,
       id: parseFloat(formData.id), // Ensure ID is numeric
       parent_id: formData.parent_id ? parseFloat(formData.parent_id) : null,
+      favourite_recitation_video: favouriteRecitationVideo || null,
     }
 
     fetch(endpoint, {
@@ -293,6 +322,18 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData, userId }) {
                   <strong>Note:</strong> {formData.note}
                 </div>
               )}
+              {formData.favourite_recitation_video && (
+                <div>
+                  <strong>Favourite recitation video:</strong>{' '}
+                  <a
+                    href={formData.favourite_recitation_video}
+                    target={'_blank'}
+                    rel={'noreferrer'}
+                  >
+                    Open YouTube
+                  </a>
+                </div>
+              )}
             </div>
             <button style={buttonStyle} type="button" onClick={handleSuccessClose}>
               OK
@@ -315,6 +356,13 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData, userId }) {
               { name: 'verse_memorized', label: 'Verses Memorized', type: 'number' },
               { name: 'juz', label: 'Juz', type: 'number', readOnly: isSubsectionMode },
               { name: 'note', label: 'Note (optional)', type: 'text' },
+              {
+                name: 'favourite_recitation_video',
+                label: 'Favourite recitation video',
+                type: 'url',
+                placeholder: 'https://www.youtube.com/watch?v=...',
+                optional: true,
+              },
             ].map((field) => (
               <label key={field.name} style={{ display: 'block', marginBottom: '16px' }}>
                 <span style={{ fontWeight: 600, color: '#2d5a55', display: 'block', marginBottom: '6px', fontFamily: 'Merriweather, serif' }}>{field.label}</span>
@@ -325,7 +373,8 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData, userId }) {
                   onChange={handleInputChange}
                   step={field.step}
                   readOnly={field.readOnly}
-                  required={field.name !== 'note'}
+                  required={field.name !== 'note' && !field.optional}
+                  placeholder={field.placeholder}
                   style={{
                     width: '100%',
                     padding: '11px 12px',
