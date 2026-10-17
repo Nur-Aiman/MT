@@ -162,6 +162,8 @@ const loadYouTubeIframeApi = () => {
 
 function SurahList() {
   const [surahs, setSurahs] = useState([])
+  const [surahsStatus, setSurahsStatus] = useState('loading')
+  const [surahsError, setSurahsError] = useState('')
   const [checkedSurahs, setCheckedSurahs] = useState({})
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isSabaqModalOpen, setIsSabaqModalOpen] = useState(false)
@@ -978,17 +980,23 @@ function SurahList() {
 }
 
   const fetchSurahs = () => {
-    fetch(`${HOST}/murajaah/getmemorizedsurah`, {
+    setSurahsStatus('loading')
+    setSurahsError('')
+
+    return fetch(`${HOST}/murajaah/getmemorizedsurah`, {
       headers: withUserHeaders(),
     })
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error('Unable to load your memorised Surahs.')
+        return res.json()
+      })
       .then((data) => {
         if (!Array.isArray(data)) {
-          console.error('Expected an array but received:', data)
-          return
+          throw new Error('The Surah list returned an unexpected response.')
         }
 
         setSurahs(data)
+        setSurahsStatus('success')
 
         const maxCount =
           data.length > 0 ? Math.max(...data.map((s) => Number(s.murajaah_counter || 0))) : 0
@@ -996,7 +1004,11 @@ function SurahList() {
 
         fetchCompletionRate(data)
       })
-      .catch((error) => console.error('An error occurred:', error))
+      .catch((error) => {
+        console.error('An error occurred:', error)
+        setSurahsError(error.message || 'Unable to load your memorised Surahs.')
+        setSurahsStatus('error')
+      })
   }
 
   const fetchCompletionRate = (surahList = surahs) => {
@@ -1375,14 +1387,24 @@ function SurahList() {
         />
       ))}
       <div className="surah-list-header">
+        <div className="surah-list-header__inner">
+          <div className="surah-list-header__copy">
+            <span className="page-eyebrow">Memorisation workspace</span>
         <h1 className="surah-list-title">
           Murajaah Tracker {auth?.user ? `— ${auth.user}` : ''}
         </h1>
+            <p className="surah-list-subtitle">Keep your daily review, recitation, and new memorisation in one calm space.</p>
+          </div>
+          <div className="surah-list-date" aria-label={`Selected date ${date}`}>
+            <span>Today</span>
+            <strong>{moment.tz(date, 'Asia/Kuala_Lumpur').format('D MMM YYYY')}</strong>
+          </div>
+        </div>
       </div>
 
       <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} />
 
-      <div className="nav-controls">
+      <nav className="nav-controls" aria-label="Tracker tools">
         {/* <button className="nav-btn" onClick={() => changeDate(-1)}>
           Yesterday
         </button> */}
@@ -1407,13 +1429,17 @@ function SurahList() {
           Sabaq
         </button>
 
+        <button className="nav-btn" onClick={() => setIsTahajjudModalOpen(true)}>
+          Tahajjud
+        </button>
+
         <button className="nav-btn logout-btn" onClick={() => {
           localStorage.removeItem(STORAGE_KEY)
           navigate('/')
         }}>
           Logout
         </button>
-      </div>
+      </nav>
 
       {/* ✅ Pass userId to modals (so you can make them user-aware too) */}
       <TilawahModal
@@ -1493,7 +1519,38 @@ function SurahList() {
         userId={userId}
       />
 
-      <div className="surahs-container">
+      {surahsStatus === 'loading' && surahs.length === 0 && (
+        <div className="surah-state" role="status" aria-live="polite">
+          <span className="state-spinner" aria-hidden="true" />
+          <div>
+            <strong>Loading your memorisation plan</strong>
+            <p>Preparing Surahs and today’s review status...</p>
+          </div>
+        </div>
+      )}
+
+      {surahsStatus === 'error' && (
+        <div className="surah-state surah-state--error" role="alert">
+          <div>
+            <strong>We could not load your Surahs</strong>
+            <p>{surahsError}</p>
+          </div>
+          <button type="button" onClick={fetchSurahs}>Try again</button>
+        </div>
+      )}
+
+      {surahsStatus === 'success' && surahs.length === 0 && (
+        <div className="surah-state surah-state--empty" role="status">
+          <div className="surah-state__icon" aria-hidden="true">+</div>
+          <div>
+            <strong>Your memorisation list is empty</strong>
+            <p>Add your first memorised Surah to begin tracking Murajaah.</p>
+          </div>
+          <button type="button" onClick={() => setIsModalOpen(true)}>Add a Surah</button>
+        </div>
+      )}
+
+      <div className={`surahs-container ${surahs.length === 0 ? 'surahs-container--empty' : ''}`}>
         {Object.keys(groupedSurahs)
           .sort((a, b) => a - b)
           .map((juz) => {

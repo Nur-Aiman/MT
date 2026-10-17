@@ -270,9 +270,9 @@ function SalahRecitationModal({
 
   return (
     <div className="salah-modal-overlay" onClick={onClose}>
-      <div className="salah-modal-content" onClick={(event) => event.stopPropagation()}>
+      <div className="salah-modal-content" role="dialog" aria-modal="true" aria-labelledby="salah-modal-title" onClick={(event) => event.stopPropagation()}>
         <div className="salah-modal-header">
-          <h2 className="salah-modal-title">Salah Recitation</h2>
+          <h2 id="salah-modal-title" className="salah-modal-title">Salah Recitation</h2>
           <button className="salah-modal-close" onClick={onClose} aria-label="Close">
             x
           </button>

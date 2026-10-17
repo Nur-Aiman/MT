@@ -873,9 +873,16 @@ const toRangeString = (min, max) =>
 
       {/* Modal - shown/hidden based on isOpen */}
       {isOpen && (
-      <div style={modalStyles} onClick={onClose}>
-      <div style={modalContentStyles} onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ borderBottom: '2px solid #84a59d', paddingBottom: '10px' }}>Add Sabaq Record</h2>
+      <div className={'glass-modal-overlay sabaq-modal-overlay'} style={modalStyles} onClick={onClose}>
+      <div
+        className={'glass-modal-panel sabaq-modal-content'}
+        style={modalContentStyles}
+        role={'dialog'}
+        aria-modal={'true'}
+        aria-labelledby={'sabaq-modal-title'}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id={'sabaq-modal-title'} style={{ borderBottom: '2px solid #84a59d', paddingBottom: '10px' }}>Add Sabaq Record</h2>
 
         {(!userId) && (
           <div style={{ marginBottom: 10, color: '#b00020', fontWeight: 700 }}>
@@ -929,6 +936,7 @@ const toRangeString = (min, max) =>
       return (
         <label
           key={n}
+          className={`sabaq-section-option ${selected ? 'is-selected' : ''}`}
           style={{
             padding: '8px 12px',
             border: '1px solid #cbd5e1',
@@ -994,10 +1002,11 @@ const toRangeString = (min, max) =>
 
 {/* Audio Player Controls */}
 <div style={audioControlsSection}>
-  <div style={audioControlsCard}>
+  <div className={'sabaq-audio-card'} style={audioControlsCard}>
     <div style={audioControlTitleRow}>
-      <div style={audioControlTitle}>Recitation Audio</div>
+      <div className={'sabaq-control-title'} style={audioControlTitle}>Recitation Audio</div>
       <button
+        className={'sabaq-audio-button'}
         type="button"
         onClick={handlePlayPause}
         disabled={!formData.chapter_number || !formData.verse || isAudioLoading}
@@ -1017,7 +1026,7 @@ const toRangeString = (min, max) =>
       </button>
     </div>
 
-    <label style={audioLoopLabel}>
+    <label className={'sabaq-toggle-row'} style={audioLoopLabel}>
       <input
         type="checkbox"
         checked={loopEnabled}
@@ -1129,10 +1138,11 @@ const toRangeString = (min, max) =>
     {/* Left column: Number of Readings (top) + Complete Memorization (under it) */}
     <div style={stackCol}>
       {/* Number of Readings */}
-      <div style={controlCard}>
-        <div style={controlTitle}>Number of Readings</div>
+      <div className={'sabaq-control-card'} style={controlCard}>
+        <div className={'sabaq-control-title'} style={controlTitle}>Number of Readings</div>
         <div style={counterRow}>
           <button
+            className={'sabaq-step-button'}
             type="button"
             onClick={() =>
               setFormData(p => ({ ...p, number_of_readings: Math.max(0, (p.number_of_readings || 0) - 1) }))
@@ -1150,6 +1160,7 @@ const toRangeString = (min, max) =>
             style={counterInput}
           />
           <button
+            className={'sabaq-step-button'}
             type="button"
             onClick={() =>
               setFormData(p => ({ ...p, number_of_readings: (p.number_of_readings || 0) + 1 }))
@@ -1162,9 +1173,9 @@ const toRangeString = (min, max) =>
       </div>
 
       {/* Complete Memorization (under Number of Readings) */}
-      <div style={controlCard}>
-        <div style={controlTitle}>Complete Memorization</div>
-        <label style={toggleRow}>
+      <div className={'sabaq-control-card'} style={controlCard}>
+        <div className={'sabaq-control-title'} style={controlTitle}>Complete Memorization</div>
+        <label className={'sabaq-toggle-row'} style={toggleRow}>
           <input
             type="checkbox"
             name="complete_memorization"
@@ -1175,10 +1186,11 @@ const toRangeString = (min, max) =>
         </label>
       </div>
 
-      <div style={controlCard}>
-      <div style={controlTitle}>Murajaah 20 Times</div>
+      <div className={'sabaq-control-card'} style={controlCard}>
+      <div className={'sabaq-control-title'} style={controlTitle}>Murajaah 20 Times</div>
       <div style={counterRow}>
         <button
+          className={'sabaq-step-button'}
           type="button"
           onClick={() =>
             setFormData(p => ({ ...p, murajaah_20_times: Math.max(0, (p.murajaah_20_times || 0) - 1) }))
@@ -1200,6 +1212,7 @@ const toRangeString = (min, max) =>
           style={counterInput}
         />
         <button
+          className={'sabaq-step-button'}
           type="button"
           onClick={() =>
             setFormData(p => ({ ...p, murajaah_20_times: Math.min(20, (p.murajaah_20_times || 0) + 1) }))

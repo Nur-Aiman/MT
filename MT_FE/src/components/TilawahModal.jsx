@@ -199,10 +199,10 @@ if (todaysLogs.length > 0) {
 
   return (
     <div className="tilawah-modal-overlay" onClick={onClose}>
-      <div className="tilawah-modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="tilawah-modal-content" role="dialog" aria-modal="true" aria-labelledby="tilawah-modal-title" onClick={(e) => e.stopPropagation()}>
         <div className="tilawah-modal-header">
-          <h2 className="tilawah-modal-title">Tilawah Tracker</h2>
-          <button className="tilawah-modal-close" onClick={onClose}>×</button>
+          <h2 id="tilawah-modal-title" className="tilawah-modal-title">Tilawah Tracker</h2>
+          <button className="tilawah-modal-close" onClick={onClose} aria-label="Close Tilawah tracker">×</button>
         </div>
 
         <div className="tilawah-modal-body">

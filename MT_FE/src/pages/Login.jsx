@@ -1,19 +1,16 @@
-// src/pages/Login.jsx
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { HOST } from '../api'
 
-const STORAGE_KEY = 'murajaah_auth' // one key, easier to manage
+const STORAGE_KEY = 'murajaah_auth'
 
 function Login() {
   const navigate = useNavigate()
-
   const [selectedUser, setSelectedUser] = useState('Aiman')
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // If already logged in, skip login page
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return
@@ -21,14 +18,14 @@ function Login() {
       const auth = JSON.parse(raw)
       if (auth?.user_id) navigate('/surahList')
     } catch {
-      // ignore bad storage
+      // Ignore invalid local storage from an earlier session.
     }
   }, [navigate])
 
   const pinValid = useMemo(() => /^\d{4}$/.test(pin), [pin])
 
-  const handleLogin = async (e) => {
-    e.preventDefault()
+  const handleLogin = async (event) => {
+    event.preventDefault()
     setError('')
 
     if (!selectedUser) return setError('Please select a user.')
@@ -36,32 +33,30 @@ function Login() {
 
     try {
       setIsSubmitting(true)
-
-      const res = await fetch(`${HOST}/login`, {
+      const response = await fetch(`${HOST}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user: selectedUser, pin }),
       })
 
-      // handle non-200 nicely
-      if (!res.ok) {
-        let msg = 'Login failed'
+      if (!response.ok) {
+        let message = 'Login failed'
         try {
-          const data = await res.json()
-          msg = data?.message || msg
-        } catch {}
-        setError(msg)
+          const data = await response.json()
+          message = data?.message || message
+        } catch {
+          // Keep the fallback message when the response is not JSON.
+        }
+        setError(message)
         return
       }
 
-      const data = await res.json()
-      // Expect backend returns: { user_id: 1, user: "Aiman" }
+      const data = await response.json()
       if (!data?.id) {
         setError('Login response missing user_id.')
         return
       }
 
-      // ✅ Store only what you need (NO PIN)
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
@@ -70,10 +65,9 @@ function Login() {
           logged_in_at: new Date().toISOString(),
         })
       )
-
       navigate('/surahList')
-    } catch (err) {
-      console.error(err)
+    } catch (loginError) {
+      console.error(loginError)
       setError('Network error. Is backend running?')
     } finally {
       setIsSubmitting(false)
@@ -81,385 +75,107 @@ function Login() {
   }
 
   return (
-    <div style={styles.page}>
-      <div style={{ ...styles.blob, ...styles.blob1 }} />
-      <div style={{ ...styles.blob, ...styles.blob2 }} />
+    <div className={'login-page'}>
+      <div className={'ambient-orb ambient-orb--one'} aria-hidden={'true'} />
+      <div className={'ambient-orb ambient-orb--two'} aria-hidden={'true'} />
 
-      <div style={styles.shell}>
-        <div style={styles.brandRow}>
-          <div style={styles.logo}>M</div>
+      <main className={'login-shell'}>
+        <header className={'login-brand'}>
+          <div className={'login-brand__mark'} aria-hidden={'true'}>M</div>
           <div>
-            <div style={styles.brandTitle}>Murajaah Tracker</div>
-            <div style={styles.brandSub}>Sign in to continue</div>
+            <span className={'page-eyebrow'}>Personal Quran companion</span>
+            <div className={'login-brand__name'}>Murajaah Tracker</div>
           </div>
-        </div>
+        </header>
 
-        <div style={styles.card}>
-          <div style={styles.cardHeader}>
-            <h1 style={styles.h1}>Login</h1>
-            <p style={styles.muted}>
-              Choose your profile and enter your 4-digit PIN.
-            </p>
+        <section className={'login-card'} aria-labelledby={'login-title'}>
+          <div className={'login-card__header'}>
+            <span className={'login-card__kicker'}>Welcome back</span>
+            <h1 id={'login-title'}>Continue your practice</h1>
+            <p>Choose your profile and enter your four-digit PIN.</p>
           </div>
 
-          <form onSubmit={handleLogin}>
-            <div style={styles.section}>
-              <div style={styles.sectionTitle}>User</div>
+          <form className={'login-form'} onSubmit={handleLogin}>
+            <fieldset className={'login-fieldset'}>
+              <legend>Choose a profile</legend>
+              <div className={'profile-options'}>
+                <UserOption
+                  label={'Aiman'}
+                  selected={selectedUser === 'Aiman'}
+                  onSelect={() => setSelectedUser('Aiman')}
+                />
+                <UserOption
+                  label={'Fithriyaani'}
+                  selected={selectedUser === 'Fithriyaani'}
+                  onSelect={() => setSelectedUser('Fithriyaani')}
+                />
+              </div>
+            </fieldset>
 
-              <UserOption
-                label="Aiman"
-                selected={selectedUser === 'Aiman'}
-                onSelect={() => setSelectedUser('Aiman')}
-              />
-              <UserOption
-                label="Fithriyaani"
-                selected={selectedUser === 'Fithriyaani'}
-                onSelect={() => setSelectedUser('Fithriyaani')}
-              />
-            </div>
-
-            <div style={styles.section}>
-              <label style={styles.sectionTitle} htmlFor="pin">
-                4-digit PIN
-              </label>
-
-              <div style={styles.pinWrap}>
-                <span style={styles.pinIcon} aria-hidden="true">
-                  🔒
-                </span>
+            <div className={'login-field'}>
+              <label htmlFor={'pin'}>4-digit PIN</label>
+              <div className={`pin-control ${error ? 'pin-control--error' : ''}`}>
+                <svg className={'pin-control__icon'} viewBox={'0 0 24 24'} aria-hidden={'true'}>
+                  <rect x={'5'} y={'10'} width={'14'} height={'10'} rx={'3'} />
+                  <path d={'M8 10V7a4 4 0 0 1 8 0v3'} />
+                </svg>
                 <input
-                  id="pin"
-                  type="password"
-                  inputMode="numeric"
-                  pattern="\d*"
+                  id={'pin'}
+                  type={'password'}
+                  inputMode={'numeric'}
+                  pattern={'[0-9]*'}
                   maxLength={4}
                   value={pin}
-                  onChange={(e) => {
-                    const next = e.target.value.replace(/\D/g, '').slice(0, 4)
-                    setPin(next)
+                  aria-invalid={Boolean(error)}
+                  aria-describedby={error ? 'login-error' : 'pin-help'}
+                  onChange={(event) => {
+                    setPin(event.target.value.replace(/\D/g, '').slice(0, 4))
                     if (error) setError('')
                   }}
-                  placeholder="Enter 4-digit PIN"
-                  style={styles.pinInput}
+                  placeholder={'Enter PIN'}
+                  autoComplete={'current-password'}
                 />
-                <span
-                  style={{
-                    ...styles.pinBadge,
-                    ...(pin.length === 0
-                      ? styles.pinBadgeIdle
-                      : pinValid
-                      ? styles.pinBadgeOk
-                      : styles.pinBadgeWarn),
-                  }}
-                >
-                  {pin.length === 0 ? '----' : `${pin.length}/4`}
+                <span className={`pin-progress ${pinValid ? 'pin-progress--valid' : ''}`}>
+                  {pin.length}/4
                 </span>
               </div>
-
-              {error && <div style={styles.errorBox}>{error}</div>}
+              <span id={'pin-help'} className={'field-hint'}>Digits only. Your PIN is never stored in this browser.</span>
+              {error && <div id={'login-error'} className={'form-message form-message--error'} role={'alert'}>{error}</div>}
             </div>
 
-            <button
-              type="submit"
-              disabled={!pinValid || isSubmitting}
-              style={{
-                ...styles.btn,
-                ...(!pinValid || isSubmitting ? styles.btnDisabled : {}),
-              }}
-            >
-              {isSubmitting ? 'Logging in…' : 'Login'}
+            <button className={'login-submit'} type={'submit'} disabled={!pinValid || isSubmitting}>
+              {isSubmitting && <span className={'button-spinner'} aria-hidden={'true'} />}
+              {isSubmitting ? 'Signing in...' : 'Sign in securely'}
             </button>
-
-            <div style={styles.footerHint}>Tip: PIN accepts digits only (0–9).</div>
           </form>
-        </div>
-      </div>
+        </section>
+
+        <p className={'login-footnote'}>A calm space for consistent memorisation and review.</p>
+      </main>
     </div>
   )
 }
 
 function UserOption({ label, selected, onSelect }) {
   return (
-    <label
-      onClick={onSelect}
-      style={{
-        ...styles.userOption,
-        ...(selected ? styles.userOptionSelected : {}),
-      }}
-    >
-      <span
-        style={{
-          ...styles.radioOuter,
-          ...(selected ? styles.radioOuterSelected : {}),
-        }}
-        aria-hidden="true"
-      >
-        <span
-          style={{
-            ...styles.radioInner,
-            ...(selected ? styles.radioInnerSelected : {}),
-          }}
-        />
-      </span>
-
-      <span style={styles.userText}>{label}</span>
-
+    <label className={`profile-option ${selected ? 'profile-option--selected' : ''}`}>
       <input
-        type="radio"
-        name="user"
+        type={'radio'}
+        name={'user'}
         value={label}
         checked={selected}
         onChange={onSelect}
-        style={styles.hiddenInput}
       />
+      <span className={'profile-option__avatar'} aria-hidden={'true'}>{label.charAt(0)}</span>
+      <span className={'profile-option__copy'}>
+        <strong>{label}</strong>
+        <span>{selected ? 'Selected profile' : 'Tap to select'}</span>
+      </span>
+      <span className={'profile-option__check'} aria-hidden={'true'}>
+        <svg viewBox={'0 0 24 24'}><path d={'m6.5 12.5 3.5 3.5 7.5-8'} /></svg>
+      </span>
     </label>
   )
-}
-
-const styles = {
-  page: {
-    minHeight: '100vh',
-    display: 'grid',
-    placeItems: 'center',
-    padding: 18,
-    fontFamily:
-      'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
-    background:
-      'radial-gradient(1200px 600px at 20% 10%, #e8f3f0 0%, rgba(232,243,240,0) 60%), radial-gradient(900px 500px at 80% 20%, #f1efe6 0%, rgba(241,239,230,0) 60%), #f6faf9',
-    position: 'relative',
-    overflow: 'hidden',
-  },
-
-  blob: {
-    position: 'absolute',
-    width: 420,
-    height: 420,
-    borderRadius: '999px',
-    filter: 'blur(40px)',
-    opacity: 0.55,
-    pointerEvents: 'none',
-  },
-  blob1: {
-    top: -120,
-    left: -120,
-    background: '#bde7dd',
-  },
-  blob2: {
-    bottom: -160,
-    right: -160,
-    background: '#ffe9b5',
-  },
-
-  shell: {
-    width: '100%',
-    maxWidth: 520,
-    position: 'relative',
-    zIndex: 1,
-  },
-
-  brandRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 14,
-    padding: '0 4px',
-  },
-  logo: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    display: 'grid',
-    placeItems: 'center',
-    background: 'linear-gradient(135deg, #84a59d 0%, #2a9d8f 100%)',
-    color: '#fff',
-    fontWeight: 900,
-    fontSize: 18,
-    boxShadow: '0 10px 20px rgba(42,157,143,0.18)',
-  },
-  brandTitle: {
-    fontWeight: 900,
-    color: '#0f172a',
-    letterSpacing: 0.2,
-  },
-  brandSub: {
-    marginTop: 2,
-    fontSize: 13,
-    color: '#64748b',
-  },
-
-  card: {
-    background: 'rgba(255,255,255,0.86)',
-    border: '1px solid rgba(148,163,184,0.35)',
-    borderRadius: 18,
-    padding: 22,
-    boxShadow:
-      '0 18px 45px rgba(15, 23, 42, 0.10), 0 2px 8px rgba(15, 23, 42, 0.06)',
-    backdropFilter: 'blur(10px)',
-  },
-
-  cardHeader: {
-    marginBottom: 14,
-  },
-  h1: {
-    margin: 0,
-    fontSize: 34,
-    letterSpacing: -0.4,
-    color: '#0f172a',
-  },
-  muted: {
-    margin: '6px 0 0',
-    color: '#64748b',
-    fontSize: 14,
-    lineHeight: 1.4,
-  },
-
-  section: {
-    marginTop: 16,
-  },
-  sectionTitle: {
-    display: 'block',
-    fontWeight: 800,
-    color: '#0f172a',
-    marginBottom: 10,
-    fontSize: 14,
-  },
-
-  userOption: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    padding: '12px 12px',
-    borderRadius: 14,
-    border: '1px solid rgba(148,163,184,0.45)',
-    background: '#ffffff',
-    cursor: 'pointer',
-    userSelect: 'none',
-    transition: 'transform 120ms ease, box-shadow 120ms ease, border 120ms ease',
-    boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
-    marginBottom: 10,
-  },
-  userOptionSelected: {
-    border: '1px solid rgba(42,157,143,0.55)',
-    boxShadow: '0 10px 24px rgba(42,157,143,0.12)',
-    transform: 'translateY(-1px)',
-  },
-
-  radioOuter: {
-    width: 20,
-    height: 20,
-    borderRadius: 999,
-    border: '2px solid rgba(100,116,139,0.5)',
-    display: 'grid',
-    placeItems: 'center',
-  },
-  radioOuterSelected: {
-    border: '2px solid #2a9d8f',
-  },
-  radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    background: 'transparent',
-  },
-  radioInnerSelected: {
-    background: '#2a9d8f',
-  },
-  userText: {
-    fontWeight: 800,
-    color: '#0f172a',
-    fontSize: 16,
-  },
-  hiddenInput: {
-    position: 'absolute',
-    opacity: 0,
-    pointerEvents: 'none',
-  },
-
-  pinWrap: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    padding: '12px 12px',
-    borderRadius: 14,
-    border: '1px solid rgba(148,163,184,0.45)',
-    background: '#ffffff',
-  },
-  pinIcon: {
-    width: 30,
-    textAlign: 'center',
-    fontSize: 18,
-    opacity: 0.9,
-  },
-  pinInput: {
-    width: '100%',
-    border: 'none',
-    outline: 'none',
-    fontSize: 16,
-    letterSpacing: 3,
-    padding: '4px 0',
-  },
-  pinBadge: {
-    minWidth: 54,
-    textAlign: 'center',
-    fontSize: 12,
-    fontWeight: 900,
-    padding: '6px 10px',
-    borderRadius: 999,
-    border: '1px solid rgba(148,163,184,0.45)',
-  },
-  pinBadgeIdle: {
-    color: '#64748b',
-    background: '#f8fafc',
-  },
-  pinBadgeOk: {
-    color: '#0f766e',
-    background: 'rgba(42,157,143,0.10)',
-    border: '1px solid rgba(42,157,143,0.35)',
-  },
-  pinBadgeWarn: {
-    color: '#92400e',
-    background: 'rgba(255,215,0,0.16)',
-    border: '1px solid rgba(255,215,0,0.35)',
-  },
-
-  errorBox: {
-    marginTop: 10,
-    color: '#b00020',
-    background: 'rgba(255, 236, 236, 0.9)',
-    border: '1px solid rgba(255, 180, 180, 0.9)',
-    padding: '10px 12px',
-    borderRadius: 12,
-    fontWeight: 700,
-    fontSize: 13,
-  },
-
-  btn: {
-    marginTop: 18,
-    width: '100%',
-    padding: '12px 14px',
-    borderRadius: 14,
-    border: 'none',
-    cursor: 'pointer',
-    fontWeight: 900,
-    fontSize: 16,
-    color: '#ffffff',
-    background: 'linear-gradient(135deg, #84a59d 0%, #2a9d8f 100%)',
-    boxShadow: '0 14px 30px rgba(42,157,143,0.18)',
-    transition: 'transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease',
-  },
-  btnDisabled: {
-    cursor: 'not-allowed',
-    opacity: 0.55,
-    boxShadow: 'none',
-    transform: 'none',
-  },
-
-  footerHint: {
-    textAlign: 'center',
-    marginTop: 12,
-    color: '#64748b',
-    fontSize: 12,
-  },
 }
 
 export default Login

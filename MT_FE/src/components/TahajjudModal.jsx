@@ -200,6 +200,7 @@ const TahajjudModal = ({ isOpen, onClose }) => {
 
   return (
     <div
+    className={'glass-modal-overlay tahajjud-modal-overlay'}
     style={{
       position: 'fixed',
       top: 0,
@@ -215,6 +216,10 @@ const TahajjudModal = ({ isOpen, onClose }) => {
     onClick={onClose}
   >
     <div
+      className={'glass-modal-panel tahajjud-modal-content'}
+      role={'dialog'}
+      aria-modal={'true'}
+      aria-labelledby={'tahajjud-modal-title'}
       style={{
         backgroundColor: '#fafbfc',
         padding: '28px',
@@ -227,7 +232,7 @@ const TahajjudModal = ({ isOpen, onClose }) => {
       }}
       onClick={e => e.stopPropagation()}
     >
-        <h2 style={{ color: '#3a8a7d', fontFamily: 'Merriweather, serif', fontSize: '24px', fontWeight: 600, marginTop: 0, borderBottom: '2px solid #6fa599', paddingBottom: '14px', marginBottom: '20px' }}>Tahajjud Tracker</h2>
+        <h2 id={'tahajjud-modal-title'} style={{ color: '#3a8a7d', fontFamily: 'Merriweather, serif', fontSize: '24px', fontWeight: 600, marginTop: 0, borderBottom: '2px solid #6fa599', paddingBottom: '14px', marginBottom: '20px' }}>Tahajjud Tracker</h2>
         <p style={{ fontFamily: 'Merriweather, serif', color: '#2d5a55', marginBottom: '12px' }}><strong>Highest Streak:</strong> {tahajjudData.highestStreak}</p>
         <p style={{ fontFamily: 'Merriweather, serif', color: '#2d5a55', marginBottom: '12px' }}><strong>Current Streak:</strong> {tahajjudData.currentStreak}</p>
         {/* <p>Total in Month {currentMonth}: {tahajjudData.totalInCurrentMonth}</p>

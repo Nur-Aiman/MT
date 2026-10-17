@@ -232,6 +232,7 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData, userId }) {
 
   return (
     <div
+      className={'glass-modal-overlay add-surah-modal-overlay'}
       style={{
         position: 'fixed',
         top: 0,
@@ -248,6 +249,10 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData, userId }) {
       onClick={onClose}
     >
       <div
+        className={'glass-modal-panel add-surah-modal-content'}
+        role={'dialog'}
+        aria-modal={'true'}
+        aria-labelledby={'surah-modal-title'}
         style={{
           backgroundColor: '#fafbfc',
           padding: '28px',
@@ -264,7 +269,7 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData, userId }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #6fa599', paddingBottom: '14px', marginBottom: '16px' }}>
-          <h3 style={{ margin: 0, color: '#3a8a7d', fontFamily: 'Merriweather, serif', fontSize: '22px', fontWeight: 600 }}>
+          <h3 id={'surah-modal-title'} style={{ margin: 0, color: '#3a8a7d', fontFamily: 'Merriweather, serif', fontSize: '22px', fontWeight: 600 }}>
             {isEditMode 
               ? `Edit ${formData.parent_id ? 'Subsection' : 'Surah'}`
               : `Add ${isSubsectionMode ? 'Subsection' : 'Surah'}`
@@ -291,12 +296,12 @@ function AddSurahModal({ isOpen, onClose, onSurahAdded, initialData, userId }) {
         </div>
 
         {isSuccess ? (
-          <div style={successContainerStyle}>
+          <div className={'modal-success-state'} style={successContainerStyle}>
             <i style={iconStyle}>✓</i>
             <h4 style={messageHeadingStyle}>
               {formData.chapter_name} successfully {isEditMode ? 'updated' : 'added'}!
             </h4>
-            <div style={detailsContainerStyle}>
+            <div className={'modal-success-details'} style={detailsContainerStyle}>
               <div>
                 <strong>ID:</strong> {formData.id}
               </div>

@@ -46,6 +46,7 @@ function LoginModal({ isOpen, onClose }) {
 
   return (
     <div
+      className={'glass-modal-overlay login-modal-overlay'}
       style={{
         position: 'fixed',
         top: 0,
@@ -62,6 +63,10 @@ function LoginModal({ isOpen, onClose }) {
       onClick={onClose}
     >
       <div
+        className={'glass-modal-panel login-modal-content'}
+        role={'dialog'}
+        aria-modal={'true'}
+        aria-labelledby={'account-modal-title'}
         style={{
           backgroundColor: '#fafbfc',
           padding: '28px',
@@ -74,7 +79,7 @@ function LoginModal({ isOpen, onClose }) {
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 style={{ borderBottom: '2px solid #6fa599', paddingBottom: '12px', marginBottom: '20px', color: '#3a8a7d', fontFamily: 'Merriweather, serif', fontSize: '22px', fontWeight: 600 }}>
+        <h3 id={'account-modal-title'} style={{ borderBottom: '2px solid #6fa599', paddingBottom: '12px', marginBottom: '20px', color: '#3a8a7d', fontFamily: 'Merriweather, serif', fontSize: '22px', fontWeight: 600 }}>
           {isLoginMode ? 'Login' : 'Register'}
         </h3>
         <form onSubmit={handleSubmit}>
