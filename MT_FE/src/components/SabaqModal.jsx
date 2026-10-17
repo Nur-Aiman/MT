@@ -95,6 +95,73 @@ const findSectionIndexByRange = (sections, surah, begin, end) => {
   return 0; // fallback
 };
 
+const SABAQ_AUDIO_CROSSFADE_SECONDS = 0.018;
+const SABAQ_AUDIO_SILENCE_THRESHOLD = 0.003;
+const SABAQ_AUDIO_EDGE_PADDING_SECONDS = 0.018;
+
+const getTrimmedAudioRegion = (buffer) => {
+  const channelData = Array.from(
+    { length: buffer.numberOfChannels },
+    (_, channel) => buffer.getChannelData(channel)
+  );
+  const blockSize = 128;
+  const hasAudioInRange = (start, end) => {
+    for (const samples of channelData) {
+      for (let index = start; index < end; index += 1) {
+        if (Math.abs(samples[index]) >= SABAQ_AUDIO_SILENCE_THRESHOLD) return true;
+      }
+    }
+    return false;
+  };
+
+  let firstAudioBlock = -1;
+  for (let start = 0; start < buffer.length; start += blockSize) {
+    if (hasAudioInRange(start, Math.min(buffer.length, start + blockSize))) {
+      firstAudioBlock = start;
+      break;
+    }
+  }
+
+  if (firstAudioBlock < 0) {
+    return { buffer, offset: 0, duration: buffer.duration };
+  }
+
+  let lastAudioBlock = firstAudioBlock;
+  for (let end = buffer.length; end > firstAudioBlock; end -= blockSize) {
+    const start = Math.max(firstAudioBlock, end - blockSize);
+    if (hasAudioInRange(start, end)) {
+      lastAudioBlock = start;
+      break;
+    }
+  }
+
+  let firstFrame = firstAudioBlock;
+  const firstBlockEnd = Math.min(buffer.length, firstAudioBlock + blockSize);
+  while (firstFrame < firstBlockEnd && !hasAudioInRange(firstFrame, firstFrame + 1)) {
+    firstFrame += 1;
+  }
+
+  let lastFrame = Math.min(buffer.length - 1, lastAudioBlock + blockSize - 1);
+  while (lastFrame > firstFrame && !hasAudioInRange(lastFrame, lastFrame + 1)) {
+    lastFrame -= 1;
+  }
+
+  const paddingFrames = Math.floor(buffer.sampleRate * SABAQ_AUDIO_EDGE_PADDING_SECONDS);
+  const startFrame = Math.max(0, firstFrame - paddingFrames);
+  const endFrame = Math.min(buffer.length, lastFrame + paddingFrames + 1);
+  const duration = (endFrame - startFrame) / buffer.sampleRate;
+
+  if (duration < 0.1) {
+    return { buffer, offset: 0, duration: buffer.duration };
+  }
+
+  return {
+    buffer,
+    offset: startFrame / buffer.sampleRate,
+    duration,
+  };
+};
+
 // ---------- component ----------
 const SabaqModal = ({ isOpen, onClose, userId }) => {
   const [formData, setFormData] = useState({
@@ -119,11 +186,28 @@ const SabaqModal = ({ isOpen, onClose, userId }) => {
 
   // Audio player state
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isAudioLoading, setIsAudioLoading] = useState(false);
   const [loopEnabled, setLoopEnabled] = useState(false);
-  const [audioUrl, setAudioUrl] = useState('');
-  const [audioPlaylist, setAudioPlaylist] = useState([]);
-  const [currentAyahIndex, setCurrentAyahIndex] = useState(0);
   const audioRef = useRef(null);
+  const audioRequestRef = useRef(0);
+  const audioSelectionKeyRef = useRef('');
+  const audioPlaylistRef = useRef([]);
+  const currentAyahIndexRef = useRef(0);
+  const playbackEngineRef = useRef(null);
+  const loopEnabledRef = useRef(false);
+  const gaplessCompletionHandlerRef = useRef(null);
+  const gaplessAudioRef = useRef({
+    context: null,
+    masterGain: null,
+    sources: new Set(),
+    abortControllers: new Set(),
+    decodedSegments: [],
+    playlist: [],
+    generation: 0,
+    finished: true,
+  });
+
+  loopEnabledRef.current = loopEnabled;
 
   const withUserHeaders = (headers = {}) => ({
     ...headers,
@@ -152,7 +236,7 @@ const SabaqModal = ({ isOpen, onClose, userId }) => {
     return null;
   };
 
-  // Fetch Quran audio URL from API based on surah and verse range
+  // Fetch Quran audio URLs from API based on surah and verse range
   const fetchQuranAudio = async (surah, verseStart, verseEnd) => {
     try {
       const response = await fetch(`https://staticquran.vercel.app/api/v1/surah/${surah}`);
@@ -174,10 +258,7 @@ const SabaqModal = ({ isOpen, onClose, userId }) => {
             .map(ayah => ayah.recitation.audio);
           
           if (audioUrls.length > 0) {
-            // Store playlist and return first URL
-            setAudioPlaylist(audioUrls);
-            setCurrentAyahIndex(0);
-            return audioUrls[0];
+            return audioUrls;
           }
         }
       }
@@ -190,82 +271,346 @@ const SabaqModal = ({ isOpen, onClose, userId }) => {
     }
   };
 
+  const ensureGaplessAudioContext = () => {
+    const state = gaplessAudioRef.current;
+    if (state.context?.state === 'closed') {
+      state.context = null;
+      state.masterGain = null;
+    }
+
+    if (!state.context) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) throw new Error('Continuous audio is not supported by this browser');
+
+      state.context = new AudioContextClass();
+      state.masterGain = state.context.createGain();
+      state.masterGain.connect(state.context.destination);
+    }
+
+    return state.context;
+  };
+
+  const decodeGaplessSegment = async (url, context) => {
+    const state = gaplessAudioRef.current;
+    const controller = new AbortController();
+    state.abortControllers.add(controller);
+
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) throw new Error('Unable to buffer recitation audio');
+
+      const encodedAudio = await response.arrayBuffer();
+      const buffer = await context.decodeAudioData(encodedAudio);
+      return { url, ...getTrimmedAudioRegion(buffer) };
+    } finally {
+      state.abortControllers.delete(controller);
+    }
+  };
+
+  const stopGaplessPlayback = ({ clearDecodedAudio = false } = {}) => {
+    const state = gaplessAudioRef.current;
+    state.generation += 1;
+    state.abortControllers.forEach(controller => controller.abort());
+    state.abortControllers.clear();
+
+    const sources = [...state.sources];
+    state.sources.clear();
+    sources.forEach(({ source, gain }) => {
+      source.onended = null;
+      try {
+        source.stop();
+      } catch {
+        // A source that already ended cannot be stopped again.
+      }
+      source.disconnect();
+      gain.disconnect();
+    });
+
+    state.finished = true;
+    if (clearDecodedAudio) {
+      state.decodedSegments = [];
+      state.playlist = [];
+    }
+  };
+
+  const scheduleGaplessPlaylist = (segments, generation) => {
+    const state = gaplessAudioRef.current;
+    const context = state.context;
+    if (!context || generation !== state.generation) return;
+
+    let nextStartTime = context.currentTime + 0.08;
+    segments.forEach((segment, index) => {
+      const startTime = Math.max(nextStartTime, context.currentTime + 0.06);
+      const endTime = startTime + segment.duration;
+      const fadeDuration = Math.min(0.008, segment.duration / 4);
+      const source = context.createBufferSource();
+      const segmentGain = context.createGain();
+      const entry = { source, gain: segmentGain };
+
+      source.buffer = segment.buffer;
+      source.connect(segmentGain);
+      segmentGain.connect(state.masterGain);
+      segmentGain.gain.setValueAtTime(0, startTime);
+      segmentGain.gain.linearRampToValueAtTime(1, startTime + fadeDuration);
+      segmentGain.gain.setValueAtTime(1, Math.max(startTime + fadeDuration, endTime - fadeDuration));
+      segmentGain.gain.linearRampToValueAtTime(0, endTime);
+
+      source.onended = () => {
+        state.sources.delete(entry);
+        source.disconnect();
+        segmentGain.disconnect();
+
+        if (generation === state.generation && index === segments.length - 1) {
+          state.finished = true;
+          gaplessCompletionHandlerRef.current?.();
+        }
+      };
+
+      state.sources.add(entry);
+      source.start(startTime, segment.offset, segment.duration);
+      nextStartTime = endTime - SABAQ_AUDIO_CROSSFADE_SECONDS;
+    });
+  };
+
+  const startGaplessPlayback = async (playlist, requestId) => {
+    const state = gaplessAudioRef.current;
+    const reusablePlaylist = state.playlist;
+    const reusableSegments = state.decodedSegments;
+    stopGaplessPlayback();
+
+    const generation = state.generation;
+    const context = ensureGaplessAudioContext();
+    if (context.state === 'suspended') await context.resume();
+
+    const canReuseDecodedAudio =
+      reusableSegments.length === playlist.length &&
+      reusablePlaylist.length === playlist.length &&
+      reusablePlaylist.every((url, index) => url === playlist[index]);
+    const segments = canReuseDecodedAudio
+      ? reusableSegments
+      : await Promise.all(playlist.map(url => decodeGaplessSegment(url, context)));
+
+    if (generation !== state.generation || requestId !== audioRequestRef.current) {
+      return false;
+    }
+
+    state.playlist = playlist;
+    state.decodedSegments = segments;
+    state.finished = false;
+    scheduleGaplessPlaylist(segments, generation);
+    return true;
+  };
+
+  const stopCompatibilityPlayback = () => {
+    if (!audioRef.current) return;
+    audioRef.current.pause();
+    audioRef.current.removeAttribute('src');
+    audioRef.current.load();
+  };
+
+  const startCompatibilityPlayback = async (playlist) => {
+    if (!audioRef.current || playlist.length === 0) return false;
+    currentAyahIndexRef.current = 0;
+    audioRef.current.src = playlist[0];
+    await audioRef.current.play();
+    return true;
+  };
+
   // Play/pause handler
   const handlePlayPause = async () => {
-    if (!audioRef.current) return;
+    if (isAudioLoading) return;
 
-    // If audio is already loaded and playing, just pause
-    if (isPlaying) {
-      audioRef.current.pause();
-      setIsPlaying(false);
+    const selectionKey = `${formData.chapter_number}:${formData.verse}`;
+    const isCurrentSelection =
+      audioSelectionKeyRef.current === selectionKey && playbackEngineRef.current;
+
+    if (isCurrentSelection && playbackEngineRef.current === 'gapless') {
+      const state = gaplessAudioRef.current;
+      const context = state.context;
+      if (!context) return;
+
+      try {
+        if (isPlaying) {
+          await context.suspend();
+          setIsPlaying(false);
+        } else if (state.finished) {
+          setIsAudioLoading(true);
+          const started = await startGaplessPlayback(
+            audioPlaylistRef.current,
+            audioRequestRef.current
+          );
+          if (started) setIsPlaying(true);
+          setIsAudioLoading(false);
+        } else {
+          await context.resume();
+          setIsPlaying(true);
+        }
+        setErrorText('');
+      } catch (error) {
+        console.error('Error controlling Sabaq audio:', error);
+        setIsAudioLoading(false);
+        setErrorText('Failed to play audio. Please try again.');
+      }
       return;
     }
 
-    // If audio URL not set, fetch it first
-    if (!audioUrl) {
-      const verseRange = parseVerseRange(formData.verse);
-      if (!verseRange || !formData.chapter_number) {
-        setErrorText('Please select chapter and section to play audio');
-        return;
+    if (isCurrentSelection && playbackEngineRef.current === 'html') {
+      if (!audioRef.current) return;
+      try {
+        if (isPlaying) {
+          audioRef.current.pause();
+          setIsPlaying(false);
+        } else {
+          if (audioRef.current.ended) {
+            await startCompatibilityPlayback(audioPlaylistRef.current);
+          } else {
+            await audioRef.current.play();
+          }
+          setIsPlaying(true);
+        }
+        setErrorText('');
+      } catch (error) {
+        console.error('Error controlling compatibility audio:', error);
+        setErrorText('Failed to play audio. Please try again.');
       }
+      return;
+    }
 
-      const url = await fetchQuranAudio(
+    const verseRange = parseVerseRange(formData.verse);
+    if (!verseRange || !formData.chapter_number) {
+      setErrorText('Please select chapter and section to play audio');
+      return;
+    }
+
+    const requestId = audioRequestRef.current + 1;
+    audioRequestRef.current = requestId;
+    audioSelectionKeyRef.current = selectionKey;
+    stopGaplessPlayback();
+    stopCompatibilityPlayback();
+    playbackEngineRef.current = null;
+    setIsPlaying(false);
+    setIsAudioLoading(true);
+    setErrorText('');
+
+    try {
+      const playlist = await fetchQuranAudio(
         formData.chapter_number,
         verseRange.start,
         verseRange.end
       );
-      
-      if (!url) return;
-      
-      setAudioUrl(url);
-      audioRef.current.src = url;
-      
+      if (!playlist || requestId !== audioRequestRef.current) return;
+
+      audioPlaylistRef.current = playlist;
+      currentAyahIndexRef.current = 0;
+
       try {
-        await audioRef.current.play();
-        setIsPlaying(true);
-      } catch (error) {
-        console.error('Error playing audio:', error);
-        setErrorText('Failed to play audio. Please try again.');
+        playbackEngineRef.current = 'gapless';
+        const started = await startGaplessPlayback(playlist, requestId);
+        if (requestId !== audioRequestRef.current) return;
+        if (started) {
+          setIsPlaying(true);
+          return;
+        }
+      } catch (gaplessError) {
+        if (requestId !== audioRequestRef.current) return;
+        console.warn('Continuous Sabaq audio unavailable; using compatibility playback:', gaplessError);
+        playbackEngineRef.current = null;
+        stopGaplessPlayback();
       }
-    } else {
-      // Resume playing
-      try {
-        await audioRef.current.play();
-        setIsPlaying(true);
-      } catch (error) {
-        console.error('Error resuming audio:', error);
-        setErrorText('Failed to resume audio. Please try again.');
-      }
+
+      playbackEngineRef.current = 'html';
+      await startCompatibilityPlayback(playlist);
+      if (requestId === audioRequestRef.current) setIsPlaying(true);
+    } catch (error) {
+      if (requestId !== audioRequestRef.current) return;
+      console.error('Error playing Sabaq audio:', error);
+      playbackEngineRef.current = null;
+      setIsPlaying(false);
+      setErrorText('Failed to play audio. Please try again.');
+    } finally {
+      if (requestId === audioRequestRef.current) setIsAudioLoading(false);
     }
   };
 
-  // Handle audio ended event
+  // Compatibility fallback for browsers without Web Audio support.
   const handleAudioEnded = () => {
-    // If there are more verses in the playlist, play the next one
-    if (audioPlaylist.length > 0 && currentAyahIndex < audioPlaylist.length - 1) {
-      const nextIndex = currentAyahIndex + 1;
-      setCurrentAyahIndex(nextIndex);
-      if (audioRef.current) {
-        audioRef.current.src = audioPlaylist[nextIndex];
-        audioRef.current.play().catch(error => {
-          console.error('Error playing next verse:', error);
-        });
-      }
-    } else if (loopEnabled) {
-      // Loop back to the beginning
-      setCurrentAyahIndex(0);
-      if (audioRef.current) {
-        audioRef.current.src = audioPlaylist[0];
-        audioRef.current.currentTime = 0;
-        audioRef.current.play().catch(error => {
-          console.error('Error looping audio:', error);
-        });
-      }
+    if (playbackEngineRef.current !== 'html') return;
+
+    const playlist = audioPlaylistRef.current;
+    if (playlist.length > 0 && currentAyahIndexRef.current < playlist.length - 1) {
+      const nextIndex = currentAyahIndexRef.current + 1;
+      currentAyahIndexRef.current = nextIndex;
+      audioRef.current.src = playlist[nextIndex];
+      audioRef.current.play().catch(error => {
+        console.error('Error playing next verse:', error);
+        setIsPlaying(false);
+      });
+    } else if (loopEnabledRef.current && playlist.length > 0) {
+      startCompatibilityPlayback(playlist).catch(error => {
+        console.error('Error looping audio:', error);
+        setIsPlaying(false);
+      });
     } else {
-      // End of playlist, stop playing
       setIsPlaying(false);
     }
   };
+
+  gaplessCompletionHandlerRef.current = () => {
+    if (playbackEngineRef.current !== 'gapless') return;
+
+    if (loopEnabledRef.current && audioPlaylistRef.current.length > 0) {
+      const requestId = audioRequestRef.current;
+      startGaplessPlayback(audioPlaylistRef.current, requestId)
+        .then(started => {
+          if (started && requestId === audioRequestRef.current) setIsPlaying(true);
+        })
+        .catch(error => {
+          console.error('Error looping continuous Sabaq audio:', error);
+          playbackEngineRef.current = null;
+          setIsPlaying(false);
+          setErrorText('Failed to loop audio. Please try again.');
+        });
+    } else {
+      setIsPlaying(false);
+    }
+  };
+
+  useEffect(() => {
+    const selectionKey = `${formData.chapter_number}:${formData.verse}`;
+    if (
+      !audioSelectionKeyRef.current ||
+      audioSelectionKeyRef.current === selectionKey
+    ) {
+      return;
+    }
+
+    audioRequestRef.current += 1;
+    stopGaplessPlayback({ clearDecodedAudio: true });
+    stopCompatibilityPlayback();
+    playbackEngineRef.current = null;
+    audioSelectionKeyRef.current = '';
+    audioPlaylistRef.current = [];
+    currentAyahIndexRef.current = 0;
+    setIsPlaying(false);
+    setIsAudioLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.chapter_number, formData.verse]);
+
+  useEffect(() => {
+    const gaplessState = gaplessAudioRef.current;
+    const audioElement = audioRef.current;
+
+    return () => {
+      audioRequestRef.current += 1;
+      stopGaplessPlayback({ clearDecodedAudio: true });
+      audioElement?.pause();
+      audioElement?.removeAttribute('src');
+      gaplessState.context?.close().catch(() => {});
+      gaplessState.context = null;
+      gaplessState.masterGain = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Load latest sabaq to rehydrate UI (✅ user-aware)
   useEffect(() => {
@@ -519,7 +864,7 @@ const toRangeString = (min, max) =>
 
   return (
     <>
-      {/* Hidden audio element - always in DOM for background playback */}
+      {/* Compatibility fallback for browsers without Web Audio support. */}
       <audio
         ref={audioRef}
         onEnded={handleAudioEnded}
@@ -655,18 +1000,18 @@ const toRangeString = (min, max) =>
       <button
         type="button"
         onClick={handlePlayPause}
-        disabled={!formData.chapter_number || !formData.verse}
+        disabled={!formData.chapter_number || !formData.verse || isAudioLoading}
         style={{
           ...audioButton,
-          opacity: (!formData.chapter_number || !formData.verse) ? 0.5 : 1,
-          cursor: (!formData.chapter_number || !formData.verse) ? 'not-allowed' : 'pointer',
-          backgroundColor: isPlaying ? '#e74c3c' : '#27ae60',
+          opacity: (!formData.chapter_number || !formData.verse || isAudioLoading) ? 0.5 : 1,
+          cursor: (!formData.chapter_number || !formData.verse || isAudioLoading) ? 'not-allowed' : 'pointer',
+          backgroundColor: isAudioLoading ? '#84a59d' : isPlaying ? '#e74c3c' : '#27ae60',
           width: 44,
           height: 44,
           padding: '8px',
           minWidth: 'unset',
         }}
-        title={isPlaying ? 'Pause' : 'Play'}
+        title={isAudioLoading ? 'Loading audio' : isPlaying ? 'Pause' : 'Play'}
       >
         {isPlaying ? '⏸' : '▶'}
       </button>
@@ -677,7 +1022,7 @@ const toRangeString = (min, max) =>
         type="checkbox"
         checked={loopEnabled}
         onChange={(e) => setLoopEnabled(e.target.checked)}
-        disabled={!formData.chapter_number || !formData.verse}
+        disabled={!formData.chapter_number || !formData.verse || isAudioLoading}
       />
       <span style={{ marginLeft: 8, fontSize: 14 }}>Loop Recitation</span>
     </label>
