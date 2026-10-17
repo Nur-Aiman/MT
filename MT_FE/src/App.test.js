@@ -16,5 +16,6 @@ test('renders the login route and theme control', () => {
 
   expect(screen.getByRole('heading', { name: /continue your practice/i })).toBeInTheDocument()
   expect(screen.getByRole('radio', { name: /aiman/i })).toBeChecked()
-  expect(screen.getByRole('button', { name: /switch to dark theme/i })).toBeInTheDocument()
+  expect(document.documentElement).toHaveAttribute('data-theme', 'dark')
+  expect(screen.getByRole('button', { name: /switch to light theme/i })).toBeInTheDocument()
 })

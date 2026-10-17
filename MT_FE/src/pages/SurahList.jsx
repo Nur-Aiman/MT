@@ -160,6 +160,64 @@ const loadYouTubeIframeApi = () => {
   return youtubeIframeApiPromise
 }
 
+function QuickActionIcon({ name }) {
+  const paths = {
+    add: (
+      <>
+        <path d="M12 5v14" />
+        <path d="M5 12h14" />
+      </>
+    ),
+    tilawah: (
+      <>
+        <path d="M4.5 5.5A3.5 3.5 0 0 1 8 4h4v15H8a3.5 3.5 0 0 0-3.5 1.5z" />
+        <path d="M19.5 5.5A3.5 3.5 0 0 0 16 4h-4v15h4a3.5 3.5 0 0 1 3.5 1.5z" />
+      </>
+    ),
+    salah: (
+      <>
+        <path d="M18.5 14.7A7.5 7.5 0 0 1 9.3 5.5 7.5 7.5 0 1 0 18.5 14.7z" />
+        <path d="M17.5 4.5l.6 1.3 1.4.2-1 1 .3 1.4-1.3-.7-1.2.7.2-1.4-1-1 1.4-.2z" />
+      </>
+    ),
+    sabaq: (
+      <>
+        <path d="M6 4.5h12v15l-6-3-6 3z" />
+        <path d="M9 8h6" />
+        <path d="M9 11h4" />
+      </>
+    ),
+    tahajjud: (
+      <>
+        <path d="M19.5 15.2A8 8 0 0 1 8.8 4.5a8 8 0 1 0 10.7 10.7z" />
+        <path d="M17.5 4v3M16 5.5h3" />
+      </>
+    ),
+    logout: (
+      <>
+        <path d="M10 5H6.5A1.5 1.5 0 0 0 5 6.5v11A1.5 1.5 0 0 0 6.5 19H10" />
+        <path d="M14 8l4 4-4 4" />
+        <path d="M9 12h9" />
+      </>
+    ),
+  }
+
+  return (
+    <svg
+      className="quick-action__svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {paths[name]}
+    </svg>
+  )
+}
+
 function SurahList() {
   const [surahs, setSurahs] = useState([])
   const [surahsStatus, setSurahsStatus] = useState('loading')
@@ -998,9 +1056,9 @@ function SurahList() {
   }
 
   const handleLogout = () => {
-  localStorage.removeItem(STORAGE_KEY)
-  navigate('/')
-}
+    localStorage.removeItem(STORAGE_KEY)
+    navigate('/')
+  }
 
   const fetchSurahs = () => {
     setSurahsStatus('loading')
@@ -1412,57 +1470,66 @@ function SurahList() {
       <div className="surah-list-header">
         <div className="surah-list-header__inner">
           <div className="surah-list-header__copy">
-            <span className="page-eyebrow">Memorisation workspace</span>
-        <h1 className="surah-list-title">
-          Murajaah Tracker {auth?.user ? `— ${auth.user}` : ''}
-        </h1>
-            <p className="surah-list-subtitle">Keep your daily review, recitation, and new memorisation in one calm space.</p>
-          </div>
-          <div className="surah-list-date" aria-label={`Selected date ${date}`}>
-            <span>Today</span>
-            <strong>{moment.tz(date, 'Asia/Kuala_Lumpur').format('D MMM YYYY')}</strong>
+            <h1 className="surah-list-title">Murajaah</h1>
+            <p className="surah-list-greeting">
+              Assalamu alaikum{auth?.user ? `, ${auth.user}` : ''}
+            </p>
           </div>
         </div>
       </div>
 
       <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} />
 
-      <nav className="nav-controls" aria-label="Tracker tools">
-        {/* <button className="nav-btn" onClick={() => changeDate(-1)}>
-          Yesterday
-        </button> */}
+      <section className="quick-actions-panel" aria-labelledby="quick-actions-title">
+        <h2 id="quick-actions-title" className="quick-actions__heading">Quick actions</h2>
 
-        {/* <button className="nav-btn" onClick={() => changeDate(1)}>
-          Tomorrow
-        </button> */}
-        <button className="nav-btn" onClick={() => setIsModalOpen(true)}>
-          Add Memorized Surah
-      </button>
+        <div className="quick-actions__grid">
+          <button
+            type="button"
+            className="quick-action quick-action--primary"
+            onClick={() => setIsModalOpen(true)}
+          >
+            <span className="quick-action__icon"><QuickActionIcon name="add" /></span>
+            <span className="quick-action__label">Add Memorized Surah</span>
+          </button>
 
-        <button className="nav-btn" onClick={() => setIsTilawahModalOpen(true)}>
-          Tilawah
-        </button>
+          <button
+            type="button"
+            className="quick-action quick-action--secondary"
+            onClick={() => setIsTilawahModalOpen(true)}
+          >
+            <span className="quick-action__icon"><QuickActionIcon name="tilawah" /></span>
+            <span className="quick-action__label">Tilawah</span>
+          </button>
 
+          <button
+            type="button"
+            className="quick-action quick-action--secondary"
+            onClick={() => setIsSalahRecitationModalOpen(true)}
+          >
+            <span className="quick-action__icon"><QuickActionIcon name="salah" /></span>
+            <span className="quick-action__label">Salah Recitation</span>
+          </button>
 
-        <button className="nav-btn" onClick={() => setIsSalahRecitationModalOpen(true)}>
-          Salah Recitation
-        </button>
+          <button
+            type="button"
+            className="quick-action quick-action--secondary"
+            onClick={() => setIsSabaqModalOpen(true)}
+          >
+            <span className="quick-action__icon"><QuickActionIcon name="sabaq" /></span>
+            <span className="quick-action__label">Sabaq</span>
+          </button>
 
-        <button className="nav-btn" onClick={() => setIsSabaqModalOpen(true)}>
-          Sabaq
-        </button>
-
-        <button className="nav-btn" onClick={() => setIsTahajjudModalOpen(true)}>
-          Tahajjud
-        </button>
-
-        <button className="nav-btn logout-btn" onClick={() => {
-          localStorage.removeItem(STORAGE_KEY)
-          navigate('/')
-        }}>
-          Logout
-        </button>
-      </nav>
+          <button
+            type="button"
+            className="quick-action quick-action--secondary"
+            onClick={() => setIsTahajjudModalOpen(true)}
+          >
+            <span className="quick-action__icon"><QuickActionIcon name="tahajjud" /></span>
+            <span className="quick-action__label">Tahajjud</span>
+          </button>
+        </div>
+      </section>
 
       {/* ✅ Pass userId to modals (so you can make them user-aware too) */}
       <TilawahModal
@@ -1795,6 +1862,13 @@ function SurahList() {
             )
           })}
       </div>
+
+      <footer className="surah-list-footer">
+        <button type="button" className="footer-logout" onClick={handleLogout}>
+          <QuickActionIcon name="logout" />
+          <span>Logout</span>
+        </button>
+      </footer>
 
       {activeAudioSurah && (
         <aside

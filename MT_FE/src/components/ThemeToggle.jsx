@@ -1,16 +1,14 @@
-import React, { useEffect, useState } from 'react'
+import React, { useLayoutEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 
 const THEME_KEY = 'murajaah_theme'
 
-const getSystemTheme = () =>
-  window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-
 function ThemeToggle() {
-  const [theme, setTheme] = useState(() => localStorage.getItem(THEME_KEY) || getSystemTheme())
+  const location = useLocation()
+  const [theme, setTheme] = useState(() => localStorage.getItem(THEME_KEY) || 'dark')
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const savedTheme = localStorage.getItem(THEME_KEY)
-    const mediaQuery = window.matchMedia?.('(prefers-color-scheme: dark)')
 
     const applyTheme = (nextTheme) => {
       document.documentElement.dataset.theme = nextTheme
@@ -18,14 +16,7 @@ function ThemeToggle() {
       setTheme(nextTheme)
     }
 
-    applyTheme(savedTheme || getSystemTheme())
-
-    const handleSystemChange = (event) => {
-      if (!localStorage.getItem(THEME_KEY)) applyTheme(event.matches ? 'dark' : 'light')
-    }
-
-    mediaQuery?.addEventListener?.('change', handleSystemChange)
-    return () => mediaQuery?.removeEventListener?.('change', handleSystemChange)
+    applyTheme(savedTheme || 'dark')
   }, [])
 
   const toggleTheme = () => {
@@ -37,11 +28,12 @@ function ThemeToggle() {
   }
 
   const nextThemeLabel = theme === 'dark' ? 'light' : 'dark'
+  const isTrackerHeader = location.pathname === '/surahList'
 
   return (
     <button
       type={'button'}
-      className={'theme-toggle'}
+      className={`theme-toggle${isTrackerHeader ? ' theme-toggle--tracker' : ''}`}
       onClick={toggleTheme}
       aria-label={`Switch to ${nextThemeLabel} theme`}
       title={`Switch to ${nextThemeLabel} theme`}
