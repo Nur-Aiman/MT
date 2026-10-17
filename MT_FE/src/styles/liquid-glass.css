@@ -756,7 +756,7 @@ textarea:focus-visible,
 .floating-audio-card {
   bottom: max(18px, env(safe-area-inset-bottom)) !important;
   width: min(680px, calc(100% - 28px)) !important;
-  padding: 11px 13px !important;
+  padding: 11px 48px 11px 13px !important;
   color: var(--text-primary) !important;
   background: var(--surface-glass-strong) !important;
   border: 1px solid var(--border-strong) !important;
@@ -764,6 +764,19 @@ textarea:focus-visible,
   box-shadow: var(--shadow-lg), inset 0 1px 0 var(--highlight) !important;
   -webkit-backdrop-filter: blur(24px) saturate(150%) !important;
   backdrop-filter: blur(24px) saturate(150%) !important;
+}
+
+.floating-audio-close {
+  color: var(--text-secondary);
+  background: var(--surface-muted);
+  border-color: var(--border-soft);
+  box-shadow: inset 0 1px 0 var(--highlight);
+}
+
+.floating-audio-close:hover {
+  color: var(--on-accent);
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
 }
 
 .floating-audio-artwork,
@@ -932,7 +945,11 @@ textarea:focus-visible,
   .floating-audio-card {
     grid-template-columns: auto minmax(0, 1fr) !important;
     gap: 8px !important;
-    padding: 10px !important;
+    padding: 10px 42px 10px 10px !important;
+  }
+
+  .surah-list-container--audio-active .surahs-container {
+    padding-bottom: calc(210px + env(safe-area-inset-bottom)) !important;
   }
 
   .floating-audio-controls {

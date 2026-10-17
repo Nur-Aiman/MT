@@ -897,6 +897,39 @@ button {
   animation: floatingAudioEnter 0.25s var(--transition-smooth);
 }
 
+.floating-audio-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  background: rgba(111, 165, 153, 0.08);
+  border: 1px solid rgba(111, 165, 153, 0.25);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+}
+
+.floating-audio-close:hover {
+  color: white;
+  background: var(--color-accent-secondary);
+  transform: scale(1.06);
+}
+
+.floating-audio-close svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
 @keyframes floatingAudioEnter {
   from {
     opacity: 0;

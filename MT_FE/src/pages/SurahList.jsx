@@ -543,6 +543,29 @@ function SurahList() {
     }
   }
 
+  const handleCloseAudioPlayer = () => {
+    // Invalidate any pending playlist or YouTube request before clearing the
+    // active selection so an older async request cannot restart playback.
+    audioRequestRef.current += 1
+    audioRefs.current.forEach(clearAudioElement)
+    stopGaplessPlayback({ clearInitialSegments: true })
+    stopYouTubePlayback()
+
+    audioPlaylistRef.current = []
+    currentAudioIndexRef.current = 0
+    activeAudioSlotRef.current = 0
+    audioPlaybackEngineRef.current = null
+    activeAudioIdRef.current = null
+    activeAudioSourceRef.current = null
+    activeYouTubeVideoIdRef.current = null
+
+    setActiveAudioId(null)
+    setIsAudioPlaying(false)
+    setIsAudioRepeating(false)
+    setLoadingAudioId(null)
+    setAudioError(null)
+  }
+
   const getYouTubePlayer = async () => {
     if (youtubePlayerRef.current?.loadVideoById) return youtubePlayerRef.current
     if (youtubePlayerPromiseRef.current) return youtubePlayerPromiseRef.current
@@ -1779,6 +1802,18 @@ function SurahList() {
           aria-label="Current Quran recitation"
           aria-live="polite"
         >
+          <button
+            type="button"
+            className="floating-audio-close"
+            onClick={handleCloseAudioPlayer}
+            aria-label="Close audio player and stop recitation"
+            title="Close player"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+
           <div
             className={`floating-audio-artwork ${
               isAudioPlaying ? 'floating-audio-artwork--playing' : ''
